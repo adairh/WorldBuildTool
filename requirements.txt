@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+psycopg2-binary
+pydantic
+python-multipart
+nicegui
+leafmap
+plotly
+pyyaml
+faker
+pytest
