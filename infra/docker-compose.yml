@@ -1,0 +1,35 @@
+version: '3.8'
+services:
+  db:
+    image: postgis/postgis:13-3.1
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: tlforge
+    ports: ['5432:5432']
+
+  api:
+    build: ./api
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://user:pass@db:5432/tlforge
+    ports: ['8000:8000']
+
+  ui:
+    build: ./ui
+    depends_on:
+      - api
+    ports: ['8080:8080']
+
+  minio:
+    image: minio/minio
+    command: server /data
+    environment:
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: password
+    ports: ['9000:9000']
+
+  redis:
+    image: redis:alpine
+    ports: ['6379:6379']
