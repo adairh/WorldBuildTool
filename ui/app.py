@@ -1,28 +1,26 @@
+from __future__ import annotations
+
 from nicegui import ui
 
 from .components.assets import asset_view
-from .components.economy import economy_view
 from .components.map import map_view
 from .components.people import people_view
-from .components.quests import quest_view
 from .components.timeline import timeline_view
 from .components.world import world_view
 
 
 def create_ui() -> None:
     @ui.page("/")
-    def index_page():
+    def index_page() -> None:
         with ui.tabs() as tabs:
-            world_tab = ui.tab("World Overview")
-            map_tab = ui.tab("Map Studio")
-            people_tab = ui.tab("People Studio")
-            timeline_tab = ui.tab("Timeline Studio")
-            quest_tab = ui.tab("Quest Studio")
-            economy_tab = ui.tab("Economy Lite")
-            asset_tab = ui.tab("Asset Studio")
+            overview_tab = ui.tab("Overview")
+            map_tab = ui.tab("Map & Spatial")
+            people_tab = ui.tab("People & Lore")
+            timeline_tab = ui.tab("Timeline & Simulation")
+            export_tab = ui.tab("Export & Checker")
 
-        with ui.tab_panels(tabs, value=world_tab):
-            with ui.tab_panel(world_tab):
+        with ui.tab_panels(tabs, value=overview_tab):
+            with ui.tab_panel(overview_tab):
                 world_view()
             with ui.tab_panel(map_tab):
                 map_view()
@@ -30,11 +28,7 @@ def create_ui() -> None:
                 people_view()
             with ui.tab_panel(timeline_tab):
                 timeline_view()
-            with ui.tab_panel(quest_tab):
-                quest_view()
-            with ui.tab_panel(economy_tab):
-                economy_view()
-            with ui.tab_panel(asset_tab):
+            with ui.tab_panel(export_tab):
                 asset_view()
 
 

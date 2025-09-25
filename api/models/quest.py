@@ -1,13 +1,21 @@
-from sqlalchemy import Column, JSON, String
+from __future__ import annotations
 
-from ..db import Base
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 
-class Quest(Base):
-    __tablename__ = "quests"
+class DialogueNode(BaseModel):
+    node_id: str
+    speaker: str
+    text: str
+    choices: List[str] = Field(default_factory=list)
 
-    id = Column(String, primary_key=True)
-    title = Column(String, nullable=False)
-    description = Column(String)
-    dialogueTree = Column(JSON)
-    relatedEventIds = Column(JSON)
+
+class Quest(BaseModel):
+    quest_id: str
+    title: str
+    description: str = ""
+    nodes: Dict[str, DialogueNode] = Field(default_factory=dict)
+    start_node: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)

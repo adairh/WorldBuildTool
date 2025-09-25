@@ -1,14 +1,28 @@
-from sqlalchemy import Column, JSON, String
+from __future__ import annotations
 
-from ..db import Base
+from typing import List
+
+from pydantic import BaseModel, Field
 
 
-class POI(Base):
-    __tablename__ = "pois"
+class Geometry(BaseModel):
+    type: str = "Point"
+    coordinates: List[float] = Field(default_factory=lambda: [0.0, 0.0])
 
-    id = Column(String, primary_key=True)
-    name = Column(String)
-    geometry = Column(JSON)
-    layers = Column(JSON)
-    tags = Column(JSON)
-    description = Column(String)
+
+class POIProperties(BaseModel):
+    name: str
+    kind: str = "generic"
+    layers: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    description: str = ""
+    media: List[str] = Field(default_factory=list)
+
+
+class POI(BaseModel):
+    id: str
+    geometry: Geometry
+    properties: POIProperties
+
+    def summary(self) -> str:
+        return f"{self.properties.name} ({', '.join(self.properties.layers) or 'unlayered'})"

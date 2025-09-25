@@ -1,39 +1,54 @@
-from datetime import date
+from __future__ import annotations
+
+from typing import List
 
 from nicegui import ui
 
-from api.schemas import WorldRequest
-from api.services import generate_world
+from api.models import Event
+from api.services import generate_timeline
+from api.storage import load_dataset
 
-try:  # pragma: no cover - optional dependency
-    import plotly.express as px
-except Exception:  # pragma: no cover
-    px = None
+
+def _load_events() -> List[Event]:
+    return [Event.model_validate(item) for item in load_dataset("events", factory=list)]
 
 
 def timeline_view() -> None:
-    """Visualize generated events."""
+    """Timeline & Simulation pillar."""
 
-    bundle = generate_world(WorldRequest(seed=88, household_count=5, quest_count=3, event_count=8))
-    events = bundle.events
+    with ui.row().classes("gap-4 items-end"):
+        day_input = ui.number("Số ngày", value=7, min=1, max=120).classes("w-40")
+        seed_input = ui.number("Seed", value=42, min=0).classes("w-40")
 
-    if not events:
-        ui.label("No events generated.")
-        return
+        def trigger() -> None:
+            generate_timeline(int(day_input.value or 7), seed=int(seed_input.value or 0))
+            refresh_table()
+            ui.notify("Đã sinh timeline")
 
-    if px is None:
-        with ui.column().classes("gap-2"):
-            ui.label("Timeline Studio").classes("text-2xl font-semibold")
-            for event in events:
-                ui.label(f"{event.year} {event.season}: {event.title} → {event.outcome}")
-        return
+        ui.button("Generate", on_click=trigger)
 
-    frame = {
-        "start": [date(event.year, 1, 1) for event in events],
-        "finish": [date(event.year, 1, 2) for event in events],
-        "title": [event.title for event in events],
-        "type": [event.type for event in events],
-    }
-    fig = px.timeline(frame, x_start="start", x_end="finish", y="title", color="type")
-    fig.update_layout(title="Timeline Studio", showlegend=True, height=400)
-    ui.plotly(fig)
+    event_table = ui.table(
+        columns=[
+            {"name": "event_id", "label": "ID", "field": "event_id"},
+            {"name": "date", "label": "Ngày", "field": "date"},
+            {"name": "title", "label": "Tiêu đề", "field": "title"},
+            {"name": "links", "label": "Liên kết", "field": "links"},
+        ],
+        rows=[],
+        row_key="event_id",
+    ).classes("w-full")
+
+    def refresh_table() -> None:
+        rows = []
+        for event in _load_events():
+            rows.append(
+                {
+                    "event_id": event.event_id,
+                    "date": event.date.isoformat(),
+                    "title": event.title,
+                    "links": f"POIs: {', '.join(event.linked_poi_ids) or '-'} | NPCs: {', '.join(event.linked_person_ids) or '-'}",
+                }
+            )
+        event_table.rows = rows
+
+    refresh_table()

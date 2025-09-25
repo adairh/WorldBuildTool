@@ -1,23 +1,28 @@
-import pytest
+from datetime import date
 
-pytest.importorskip("pydantic")
-
-from api.schemas import WorldRequest
-from api.services import check_age, generate_world, validate_world
-
-
-def test_check_age_violation():
-    person = {"name": "Nguyễn", "birthYear": 1290}
-    result = check_age(person, event_year=1305, min_age=10)
-    assert result is None
-
-    result = check_age(person, event_year=1295, min_age=10)
-    assert result == "Error: Nguyễn quá trẻ cho sự kiện 1295"
+from api.models import Event, Household, HouseholdLocation, Person
+from api.services import validate_world
+from api.storage import save_dataset
 
 
-def test_world_validation_detects_missing_participant():
-    request = WorldRequest(seed=77, household_count=2, quest_count=2, event_count=3)
-    bundle = generate_world(request)
-    bundle.events[0].participantIds.append("MISSING")
-    errors = validate_world(bundle)
-    assert any("missing participant" in err for err in errors)
+def test_validate_world_flags_missing_poi_and_young_member():
+    child = Person(person_id="P-0001", name="Lý Văn", birth_year=1290, sex="M", household_id="HH-0001")
+    household = Household(
+        household_id="HH-0001",
+        members=[child],
+        location=HouseholdLocation(poi_id=None),
+    )
+    event = Event(
+        event_id="EV-0001",
+        date=date(1295, 1, 1),
+        title="Lễ hội",
+        linked_person_ids=[child.person_id],
+    )
+
+    save_dataset("households", [household.model_dump()])
+    save_dataset("persons", [child.model_dump()])
+    save_dataset("events", [event.model_dump()])
+
+    issues = validate_world()
+    assert any("missing POI" in issue for issue in issues)
+    assert any("quá trẻ" in issue for issue in issues)

@@ -1,63 +1,52 @@
-from typing import List
+from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from typing import Dict, List
 
-from ..db import SessionLocal
-from ..models.person import Person
-from ..schemas import Person as PersonSchema
-from ..services import generate_households
+from fastapi import APIRouter, HTTPException
+
+from ..models import Household, Person
+from ..storage import load_dataset
 
 router = APIRouter(prefix="/persons", tags=["persons"])
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def _load_people() -> List[Person]:
+    return [Person.model_validate(item) for item in load_dataset("persons", factory=list)]
 
 
-@router.get("/preview", response_model=List[PersonSchema])
-def preview_persons(
-    households: int = Query(3, ge=1, le=24, description="How many households to sample"),
-    seed: int = Query(42, description="Seed used for deterministic preview"),
-) -> List[PersonSchema]:
-    generated = generate_households(count=households, seed=seed)
-    return [member for household in generated for member in household.members]
+def _load_households() -> List[Household]:
+    return [Household.model_validate(item) for item in load_dataset("households", factory=list)]
 
 
-@router.get("/{person_id}", response_model=dict)
-def get_person(person_id: str, db: Session = Depends(get_db)):
-    person = db.query(Person).filter(Person.id == person_id).first()
+@router.get("", response_model=List[Person])
+async def list_people() -> List[Person]:
+    return _load_people()
+
+
+@router.get("/{person_id}", response_model=Person)
+async def get_person(person_id: str) -> Person:
+    for person in _load_people():
+        if person.person_id == person_id:
+            return person
+    raise HTTPException(status_code=404, detail="Person not found")
+
+
+@router.get("/{person_id}/relations")
+async def get_relations(person_id: str) -> Dict[str, List[str]]:
+    people = {person.person_id: person for person in _load_people()}
+    person = people.get(person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    return {
-        "id": person.id,
-        "name": person.name,
-        "birthYear": person.birthYear,
-        "deathYear": person.deathYear,
-        "sex": person.sex,
-        "profession": person.profession,
-        "householdId": person.householdId,
-        "homePoiId": person.homePoiId,
-    }
 
+    relations: Dict[str, List[str]] = {"household": [], "same_profession": []}
+    for household in _load_households():
+        ids = [member.person_id for member in household.members]
+        if person_id in ids:
+            relations["household"] = [pid for pid in ids if pid != person_id]
+            break
 
-@router.get("/", response_model=List[dict])
-def list_persons(db: Session = Depends(get_db)):
-    persons = db.query(Person).all()
-    return [
-        {
-            "id": person.id,
-            "name": person.name,
-            "birthYear": person.birthYear,
-            "deathYear": person.deathYear,
-            "sex": person.sex,
-            "profession": person.profession,
-            "householdId": person.householdId,
-            "homePoiId": person.homePoiId,
-        }
-        for person in persons
-    ]
+    for other in people.values():
+        if other.person_id != person.person_id and other.profession == person.profession:
+            relations["same_profession"].append(other.person_id)
+
+    return relations

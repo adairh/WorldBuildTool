@@ -1,14 +1,5 @@
 fastapi
 uvicorn
-sqlalchemy
-alembic
-psycopg2-binary
 pydantic
-pydantic-settings
-python-multipart
 nicegui
-leafmap
-plotly
-pyyaml
 faker
-pytest

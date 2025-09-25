@@ -1,60 +1,76 @@
-"""Export helpers for packaging TL-Forge artifacts."""
-
 from __future__ import annotations
 
+import csv
 import json
-import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Optional, Union
+from typing import Dict, Iterable, List
 
-from ..config import ensure_storage_dir
-from ..schemas import WorldBundle
+from ..storage import export_path, load_dataset
 
-
-def _resolve_output_path(
-    filename: Union[str, Path], directory: Optional[Union[str, Path]] = None
-) -> Path:
-    output = Path(filename)
-    if not output.is_absolute():
-        base_dir = Path(directory) if directory is not None else ensure_storage_dir()
-        output = base_dir / output
-    output.parent.mkdir(parents=True, exist_ok=True)
-    return output
+SUPPORTED_FORMATS = {"json", "csv", "unity"}
 
 
-def export_data(
-    data: Mapping[str, Iterable],
-    filename: Union[str, Path] = "export.zip",
-    directory: Optional[Union[str, Path]] = None,
-) -> str:
-    """Write arbitrary mapping payloads to a zip archive."""
-
-    output = _resolve_output_path(filename, directory)
-    with zipfile.ZipFile(output, "w") as zf:
-        for key, value in data.items():
-            zf.writestr(f"{key}.json", json.dumps(value, ensure_ascii=False, indent=2))
-    return str(output)
+def _timestamped_filename(prefix: str, extension: str) -> str:
+    now = datetime.now(timezone.utc)
+    return f"{prefix}-{now.strftime('%Y%m%d-%H%M%S')}.{extension}"
 
 
-def export_world_bundle(
-    bundle: WorldBundle,
-    filename: Union[str, Path] = "world_bundle.zip",
-    directory: Optional[Union[str, Path]] = None,
-) -> str:
-    """Serialize a :class:`WorldBundle` into a structured archive."""
-
-    payload = bundle.dict() if hasattr(bundle, "dict") else bundle.model_dump()
-    manifest = {
-        "seed": bundle.seed,
-        "households": len(bundle.households),
-        "persons": len(bundle.persons),
-        "events": len(bundle.events),
-        "quests": len(bundle.quests),
-        "assets": len(bundle.assets),
-    }
-    data = {"manifest": manifest}
-    data.update({k: v for k, v in payload.items() if k != "seed"})
-    return export_data(data, filename=filename, directory=directory)
+def _entry_key(entry: Dict[str, object], fallback_prefix: str, idx: int) -> str:
+    for key in ("id", "person_id", "household_id", "event_id", "quest_id"):
+        value = entry.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return f"{fallback_prefix}-{idx:04d}"
 
 
-__all__ = ["export_data", "export_world_bundle"]
+def export_bundle(types: Iterable[str], fmt: str = "json") -> Path:
+    fmt = fmt.lower()
+    if fmt not in SUPPORTED_FORMATS:
+        raise ValueError(f"Unsupported export format: {fmt}")
+
+    payload: Dict[str, List[Dict[str, object]]] = {}
+    for item_type in types:
+        data = load_dataset(item_type, factory=list)
+        payload[item_type] = list(data)
+
+    if fmt == "json":
+        filename = _timestamped_filename("bundle", "json")
+        path = export_path(filename)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        return path
+
+    if fmt == "unity":
+        filename = _timestamped_filename("bundle-unity", "json")
+        path = export_path(filename)
+        unity_payload = {
+            key: {
+                _entry_key(entry, key, idx): entry for idx, entry in enumerate(value)
+            }
+            for key, value in payload.items()
+        }
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(unity_payload, handle, ensure_ascii=False, indent=2)
+        return path
+
+    base_dir = export_path(_timestamped_filename("csv", "dir").replace(".dir", ""))
+    base_dir.mkdir(parents=True, exist_ok=True)
+    for key, value in payload.items():
+        if not value:
+            continue
+        headers = sorted({field for entry in value for field in entry.keys()})
+        csv_path = base_dir / f"{key}.csv"
+        with csv_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=headers)
+            writer.writeheader()
+            for entry in value:
+                writer.writerow(entry)
+    return base_dir
+
+
+def list_available_exports() -> List[Path]:
+    base = export_path("").parent
+    if not base.exists():
+        return []
+    return sorted(base.glob("*"))

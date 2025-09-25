@@ -1,30 +1,41 @@
-from typing import List
+from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from typing import List, Optional
 
-from ..schemas import Household
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from ..models import Household
 from ..services import generate_households
+from ..storage import load_dataset
 
 router = APIRouter(prefix="/households", tags=["households"])
 
 
-@router.get("/preview", response_model=List[Household])
-def preview_households(
-    count: int = Query(6, ge=1, le=48, description="Number of households to synthesize"),
-    seed: int = Query(42, description="Seed for deterministic generation"),
-) -> List[Household]:
-    """Generate sample households with relationships, ledger info, and traits."""
-
-    return generate_households(count=count, seed=seed)
+class HouseholdGenerateRequest(BaseModel):
+    count: int = Field(default=10, ge=1, le=200)
+    seed: Optional[int] = None
+    poi_pool: Optional[List[str]] = None
 
 
-@router.get("/archetypes", response_model=List[str])
-def household_archetypes() -> List[str]:
-    """Expose narrative archetypes for design reference."""
+def _load_households() -> List[Household]:
+    return [Household.model_validate(item) for item in load_dataset("households", factory=list)]
 
-    return [
-        "Royal courier families balancing loyalty and intrigue",
-        "River wardens policing illicit qi trafficking",
-        "Martial academies shielding prodigies from rival sects",
-        "Merchant guild clans financing rebellion and court life simultaneously",
-    ]
+
+@router.get("", response_model=List[Household])
+async def list_households() -> List[Household]:
+    return _load_households()
+
+
+@router.get("/{household_id}", response_model=Household)
+async def get_household(household_id: str) -> Household:
+    for household in _load_households():
+        if household.household_id == household_id:
+            return household
+    raise HTTPException(status_code=404, detail="Household not found")
+
+
+@router.post("/generate", response_model=List[Household])
+async def generate(request: HouseholdGenerateRequest) -> List[Household]:
+    households = generate_households(request.count, seed=request.seed, poi_pool=request.poi_pool)
+    return households

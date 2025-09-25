@@ -1,64 +1,56 @@
-"""Consistency validators for TL-Forge world bundles."""
-
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from datetime import date
+from typing import Dict, List
 
-from ..schemas import Event, Person, Quest, WorldBundle
-
-
-def check_age(person: Dict[str, int], event_year: int, min_age: int = 10) -> Optional[str]:
-    """Return an error string when a person is younger than the allowed threshold."""
-
-    birth_year = person.get("birthYear")
-    if birth_year is None:
-        return None
-    if event_year - birth_year < min_age:
-        return f"Error: {person.get('name', 'Unknown')} quá trẻ cho sự kiện {event_year}"
-    return None
+from ..models import Event, Household, Person
+from ..storage import load_dataset
 
 
-def _validate_event_participants(person_index: Dict[str, Person], event: Event) -> List[str]:
-    errors: List[str] = []
-    for participant_id in event.participantIds:
-        if participant_id not in person_index:
-            errors.append(
-                f"Event {event.id} references missing participant {participant_id}."
-            )
-            continue
-        person = person_index[participant_id]
-        violation = check_age({"name": person.name, "birthYear": person.birthYear}, event.year, 12)
-        if violation:
-            errors.append(f"{violation} (event {event.id})")
-    return errors
+def _load_people() -> List[Person]:
+    return [Person.model_validate(item) for item in load_dataset("persons", factory=list)]
 
 
-def _validate_quest_graph(quest: Quest) -> List[str]:
-    errors: List[str] = []
-    if quest.startingNodeId not in quest.nodes:
-        errors.append(f"Quest {quest.id} missing starting node {quest.startingNodeId}")
-    for node_id, node in quest.nodes.items():
-        for choice in node.choices:
-            if choice.nextNodeId and choice.nextNodeId not in quest.nodes:
-                errors.append(
-                    f"Quest {quest.id} choice {choice.id} points to missing node {choice.nextNodeId}"
+def _load_households() -> List[Household]:
+    return [Household.model_validate(item) for item in load_dataset("households", factory=list)]
+
+
+def _load_events() -> List[Event]:
+    return [Event.model_validate(item) for item in load_dataset("events", factory=list)]
+
+
+def validate_world(min_event_age: int = 10) -> List[str]:
+    """Run consistency checks across stored datasets."""
+
+    issues: List[str] = []
+    people = {person.person_id: person for person in _load_people()}
+    households = _load_households()
+    events = _load_events()
+
+    for household in households:
+        if household.location.poi_id is None:
+            issues.append(f"Household {household.household_id} missing POI reference")
+        seen = set()
+        for member in household.members:
+            if member.person_id in seen:
+                issues.append(f"Duplicate member id {member.person_id} in household {household.household_id}")
+            seen.add(member.person_id)
+
+    for event in events:
+        for person_id in event.linked_person_ids:
+            person = people.get(person_id)
+            if not person:
+                issues.append(f"Event {event.event_id} references unknown person {person_id}")
+                continue
+            age = person.age_in_year(event.date.year)
+            if age is not None and age < min_event_age:
+                issues.append(
+                    f"{person.name} quá trẻ ({age}) cho sự kiện {event.title} năm {event.date.year}"
                 )
-    return errors
+
+    return issues
 
 
-def validate_world(bundle: WorldBundle) -> List[str]:
-    """Run a suite of consistency checks against a world bundle."""
-
-    errors: List[str] = []
-    person_index = {person.id: person for person in bundle.persons}
-
-    for event in bundle.events:
-        errors.extend(_validate_event_participants(person_index, event))
-
-    for quest in bundle.quests:
-        errors.extend(_validate_quest_graph(quest))
-
-    return errors
-
-
-__all__ = ["check_age", "validate_world"]
+def validation_summary() -> Dict[str, int]:
+    issues = validate_world()
+    return {"issues": len(issues)}
