@@ -6,6 +6,10 @@ stack Python thuần, không Docker, không cơ sở dữ liệu – tất cả 
 thư mục `storage/`. Bộ công cụ được chia thành bốn trụ chính để hỗ trợ sản xuất nội dung cho một
 Vietnam Wuxia MMORPG.
 
+> 🎯 **Dành cho nhà thiết kế AAA**: xem thêm tài liệu "[TL-Forge — AAA Designer Command Desk](docs/designer_spec.md)"
+> để nắm trải nghiệm người dùng, các overlay bắt buộc, rulebook và định nghĩa hoàn thành từ góc nhìn
+> đội thiết kế game.
+
 ## Bộ công cụ cuối cùng (Bức tranh tổng)
 
 ### A. Map & Spatial
