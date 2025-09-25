@@ -1,10 +1,10 @@
 # TL-Forge Toolkit — Python-Only, File-Backed Edition
 
 "Tôi đang làm worldbuild cho Thăng Long" nghĩa là chúng ta cần cả một xưởng công cụ để giữ cho
-phường phố, gia tộc, lễ hội và nhiệm vụ luôn sống động. Bản refactor này gom toàn bộ dự án vào một
-stack Python thuần, không Docker, không cơ sở dữ liệu – tất cả dữ liệu được lưu thành JSON/CSV trong
-thư mục `storage/`. Bộ công cụ được chia thành bốn trụ chính để hỗ trợ sản xuất nội dung cho một
-Vietnam Wuxia MMORPG.
+phường phố, gia tộc, lễ hội, bãi quái, trang bị và hoạt động luôn sống động. Phiên bản mới gom toàn
+bộ dự án vào một stack Python thuần, không Docker, không cơ sở dữ liệu – tất cả dữ liệu được lưu
+thành JSON/CSV trong thư mục `storage/`. TL‑Forge giờ là bàn điều khiển AAA trọn vẹn cho một Vietnam
+Wuxia MMORPG: narrative, gameplay, economy, QA đồng bộ chỉ với Python + file.
 
 > 🎯 **Dành cho nhà thiết kế AAA**: xem thêm tài liệu "[TL-Forge — AAA Designer Command Desk](docs/designer_spec.md)"
 > để nắm trải nghiệm người dùng, các overlay bắt buộc, rulebook và định nghĩa hoàn thành từ góc nhìn
@@ -12,56 +12,57 @@ Vietnam Wuxia MMORPG.
 
 ## Bộ công cụ cuối cùng (Bức tranh tổng)
 
-### A. Map & Spatial
+### A. Map & Spatial Warfare
 - **Map Annotator**: tạo marker GeoJSON, phân lớp (architecture/economy/religion/social), xuất dữ liệu.
-- **Tile & Historical Overlay**: tải ảnh nền, chồng lớp bản đồ cổ (dùng file nội bộ).
+- **Monster Zone Overlay**: polygon spawn zone, heatmap cấp độ, encounter style breakdown.
 - **Procedural District Layout**: sinh khu phố theo seed, dựa trên quy tắc phường nghề.
-- **POI Dependency Manager**: kiểm tra ràng buộc (chợ ↔ sông, đình ↔ trung tâm phường).
+- **POI Dependency Manager**: kiểm tra ràng buộc (chợ ↔ sông, dungeon ↔ hub, patrol ↔ gate).
 
-### B. People & Lore
-- **Household / NPC Generator**: sinh hộ dân, nghề nghiệp, gốc gác; lưu thành JSON + CSV.
-- **Relationship Graph Viewer**: xuất dữ liệu mạng quan hệ để cytoscape/d3 xử lý.
-- **Dialogue / Quest Node Editor**: viết hội thoại phân nhánh, xuất JSON.
-- **Name Generator**: seedable, theo khu vực/đình/giáp.
+### B. Story, Quest & Cinematic Control
+- **Story Arc Manager**: arc main/faction/class/seasonal, coverage auto-sync map & timeline.
+- **Quest Graph Editor**: node thoại, lựa chọn, condition, variety checker combat/social/puzzle.
+- **Narrative Coverage Dashboard**: hub nào còn trống, cinematic hook nào cần dựng.
+- **Approval Pipeline**: LGD approve arc, ND approve dialogue, QA xem diff.
 
-### C. Assets & Media
-- **Asset Tracker**: quản lý tag, phiên bản, moodboard.
-- **Prompt Refiner & Batch Prompting**: sinh prompt AI theo biến thể.
-- **Concept Review Board**: bảng duyệt/nhận xét.
-- **Image Reference Geotagger**: gắn reference vào POI.
+### C. Combat Features & Live Activities
+- **Monster Camp Designer**: spawn pool, faction link, event hook (đêm/mùa/invasion).
+- **Gameplay Feature Library**: Arena, Quest Board, Crafting Station, Dungeon Entrance, PvP Zone, Festival.
+- **Activity Scheduler**: daily/weekly/seasonal mini-game, quest board, community events.
+- **Encounter Variety Analytics**: combat/social/puzzle ratio theo hub và zone.
 
-### D. Simulation & Export
-- **Timeline Manager**: kéo-thả sự kiện, kiểm tra phụ thuộc.
-- **Economy Simulator**: nhập sản lượng → dòng chảy thuế, thương mại.
-- **Event Randomizer / Scheduler**: sinh sự kiện theo mùa/ngày.
-- **Exporter & Consistency Checker**: tạo gói JSON/CSV/Unity ScriptableObject.
+### D. Loot, Economy & Export
+- **Household / NPC Generator**: sinh hộ dân, ledger kinh tế, nghề, rep.
+- **Loot & Item Tables**: nguồn rơi từ quest/monster/feature/activity, progression timeline.
+- **Timeline & Shock Simulator**: sự kiện lịch sử, bão, trade fair ảnh hưởng kinh tế.
+- **Exporter & Rulebook Checker**: JSON/CSV/Unity + rule violations realtime.
 
 ## Ưu tiên cao (đổi cuộc chơi ngay)
-1. **Map Annotator** (GeoJSON + layer) – neo mọi thông tin không gian.
-2. **Household/NPC Generator + Relationship Graph** – dựng xã hội, cung cấp dữ liệu nhiệm vụ.
-3. **Timeline Manager** – giữ lịch sử đồng bộ.
-4. **Exporter + Consistency Checker** – đưa dữ liệu vào Unity hoặc pipeline dev.
+1. **Command Desk Dashboard** – realtime coverage, rulebook, export readiness.
+2. **Story Arc + Quest Graph** – kéo thả arc, sync map/timeline, cinematic checklist.
+3. **Monster Zone + Feature Planner** – heatmap cấp độ, coverage hub × feature.
+4. **Loot & Activity Systems** – loot source health, activity cadence, economy snapshot.
 
 ## MVP cho từng tool
 | Tool | Tính năng tối thiểu |
 |------|--------------------|
-| Map Annotator | Upload ảnh nền, tạo marker (type/tags/description/images), bật/tắt layer, export GeoJSON |
-| NPC Generator | Nhập số hộ + seed, sinh hộ dân, cho phép chỉnh sửa, export JSON + CSV |
-| Timeline | Thêm sự kiện (ISO date), mô tả, liên kết POI/NPC, filter theo giai đoạn, export CSV/JSON |
-| Exporter | Chọn loại dữ liệu (NPC/POI/Event), xuất JSON/CSV/Unity JSON |
+| Command Desk | Dashboard coverage/story/feature/loot, refresh seed, expose rule issues |
+| Story Arc Builder | Sinh questline + arc, tính coverage, đánh dấu cinematic, export JSON |
+| Monster & Feature Planner | Vẽ zone polygon, chọn pool quái, gắn feature hub, heatmap variety |
+| Loot & Activity Scheduler | Lập bảng item drop, lịch hoạt động daily/weekly/seasonal |
+| Exporter | Chọn loại dữ liệu (POI/Quest/Zone/Item/Activity), xuất JSON/CSV/Unity JSON |
 
 ## Repository Structure
 ```
 api/
   config.py          # cấu hình và thư mục lưu trữ
   storage.py         # helper đọc/ghi JSON cục bộ
-  models/            # Pydantic models cho POI, household, person, event, asset, quest
-  routers/           # FastAPI routers (pois, households, events, export)
-  services/          # nghiệp vụ: generator, checker, exporter, map annotator helpers
+  models/            # Pydantic models cho POI, household, quest, story arc, monster zone, loot, activity
+  routers/           # FastAPI routers (world, pois, households, quests, story, monsters, features, items, activities, export)
+  services/          # nghiệp vụ: generator, checker, exporter, dashboard analytics
   main.py            # FastAPI app
 ui/
   app.py             # NiceGUI shell
-  components/        # view cho Map, People, Timeline, Exporter, Assets
+  components/        # view cho Command Desk, Story, Encounters, Gameplay, Loot, QA
 storage/             # sinh trong runtime (git ignored)
 docs/                # tài liệu bổ sung
 requirements.txt     # chỉ Python packages (không Docker)
@@ -87,7 +88,9 @@ python -m ui.app
 
 ## Lưu trữ và dữ liệu mẫu
 - Tất cả dữ liệu nằm trong `storage/` (tự tạo nếu chưa tồn tại).
-- `storage/pois.json`, `storage/households.json`, `storage/persons.json`, `storage/events.json`.
+- `storage/pois.json`, `storage/households.json`, `storage/persons.json`, `storage/events.json`,
+  `storage/quests.json`, `storage/story_arcs.json`, `storage/monster_zones.json`,
+  `storage/features.json`, `storage/items.json`, `storage/activities.json`.
 - Xuất khẩu được lưu tại `storage/exports/` (JSON, CSV, Unity-style JSON).
 
 Ví dụ hộ dân:
@@ -121,12 +124,18 @@ Ví dụ POI (GeoJSON-like):
 ```
 
 ## API Surface (python-only, file-backed)
-- `GET /pois`, `POST /pois`, `PUT /pois/{poi_id}` – quản lý marker và layers.
-- `POST /households/generate` – sinh hộ dân theo `{count, seed, poi_pool}`.
-- `GET /households` – đọc dữ liệu đã lưu.
-- `POST /events` / `GET /events` – quản lý timeline.
-- `POST /export` – `{types:["pois","persons","households","events"], format:"json"|"csv"|"unity"}` → trả đường dẫn file.
-- `POST /checker/validate` – trả danh sách vấn đề (tuổi, trùng id, liên kết POI thiếu).
+- `POST /world/regenerate` – tái tạo toàn bộ dataset (POI, quest, arc, zone, feature, item, activity).
+- `GET /world/dashboard` – coverage %, encounter breakdown, loot distribution, export readiness.
+- `GET/POST /quests` – quản lý quest graph.
+- `GET/POST /story/arcs` – quản lý arc coverage.
+- `GET/POST /monsters/zones` – zone spawn & encounter variety.
+- `GET/POST /features` – gameplay feature placement.
+- `GET/POST /items` – loot tables từ quest/monster/feature/activity.
+- `GET/POST /activities` – lịch hoạt động daily/weekly/seasonal.
+- `POST /households/generate`, `GET /households` – dữ liệu dân cư.
+- `GET/POST /events` – timeline lịch sử.
+- `POST /export` – `{types:[...], format:"json"|"csv"|"unity"}` → trả đường dẫn file.
+- `GET /checker/summary` – rulebook issues + metrics.
 
 ## UI Wireframe (Map Annotator)
 ```

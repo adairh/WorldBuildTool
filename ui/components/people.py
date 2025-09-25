@@ -35,6 +35,8 @@ def people_view() -> None:
         columns=[
             {"name": "household_id", "label": "Hộ", "field": "household_id"},
             {"name": "house_type", "label": "Loại nhà", "field": "house_type"},
+            {"name": "district", "label": "Quận", "field": "district"},
+            {"name": "ledger", "label": "Tài sản", "field": "ledger"},
             {"name": "members", "label": "Thành viên", "field": "members"},
         ],
         rows=[],
@@ -59,6 +61,8 @@ def people_view() -> None:
             {
                 "household_id": household.household_id,
                 "house_type": household.house_type,
+                "district": household.district or "-",
+                "ledger": f"Agri:{household.ledger.rice} / Silver:{household.ledger.silver}",
                 "members": ", ".join(member.name for member in household.members),
             }
             for household in households

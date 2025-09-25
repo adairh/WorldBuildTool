@@ -1,13 +1,11 @@
 from fastapi.testclient import TestClient
 
-from fastapi.testclient import TestClient
-
 from api.main import app
 
 client = TestClient(app)
 
 
-def test_poi_crud_cycle():
+def test_poi_crud_cycle() -> None:
     response = client.post(
         "/pois",
         json={
@@ -34,23 +32,39 @@ def test_poi_crud_cycle():
     assert "salt" in update.json()["properties"]["tags"]
 
 
-def test_generation_and_checker():
-    household_response = client.post("/households/generate", json={"count": 3, "seed": 10})
-    assert household_response.status_code == 200
-    households = household_response.json()
-    assert len(households) == 3
+def test_world_dashboard_and_story() -> None:
+    regenerate = client.post("/world/regenerate", json={"seed": 11})
+    assert regenerate.status_code == 200
+    assert regenerate.json()["datasets"]["pois"] > 0
 
-    events_response = client.post("/events/generate", json={"days": 5, "seed": 10})
-    assert events_response.status_code == 200
+    dashboard = client.get("/world/dashboard")
+    assert dashboard.status_code == 200
+    body = dashboard.json()
+    assert body["story_coverage"] >= 0
+    assert "encounter_breakdown" in body
 
-    checker_response = client.get("/checker/summary")
-    assert checker_response.status_code == 200
-    assert "issues" in checker_response.json()
+    quests = client.get("/quests")
+    assert quests.status_code == 200
+    assert len(quests.json()) > 0
+
+    arcs = client.get("/story/arcs")
+    assert arcs.status_code == 200
+    assert len(arcs.json()) > 0
+
+    zones = client.get("/monsters/zones")
+    assert zones.status_code == 200
+    assert len(zones.json()) > 0
 
 
-def test_export_bundle(tmp_path):
-    client.post("/households/generate", json={"count": 2, "seed": 5})
-    export_response = client.post("/export", json={"types": ["households", "persons"], "format": "json"})
+def test_export_bundle() -> None:
+    client.post("/world/regenerate", json={"seed": 7})
+    export_response = client.post(
+        "/export",
+        json={
+            "types": ["households", "persons", "quests", "items"],
+            "format": "json",
+        },
+    )
     assert export_response.status_code == 200
     path = export_response.json()["path"]
     assert path.endswith(".json")

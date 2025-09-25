@@ -6,7 +6,7 @@ from typing import List
 from nicegui import ui
 
 from api.models import POI
-from api.services import generate_poi
+from api.services import generate_poi, validation_summary
 from api.storage import load_dataset
 
 try:  # optional dependency for interactive map
@@ -21,6 +21,20 @@ def _load_pois() -> List[POI]:
 
 def map_view() -> None:
     """Map & Spatial pillar overview."""
+
+    summary = validation_summary()
+
+    with ui.grid(columns=3).classes("gap-4 w-full"):
+        for label, key in (
+            ("Story Coverage", "story_coverage"),
+            ("Monster Variety", "monster_variety"),
+            ("Feature Coverage", "feature_coverage"),
+        ):
+            value = float(summary.get(key, 0)) / 100.0
+            with ui.card().classes("bg-slate-900 text-slate-100 p-4"):
+                ui.label(label).classes("uppercase text-xs tracking-wide text-slate-400")
+                ui.label(f"{summary.get(key, 0)} %").classes("text-xl font-semibold")
+                ui.linear_progress(value=value).props("color=amber")
 
     poi_table = ui.table(
         columns=[
@@ -67,15 +81,16 @@ def map_view() -> None:
         )
 
     if leafmap is None:
-        ui.label("Leafmap chưa cài đặt; hiển thị danh sách POI dạng bảng.").classes("text-sm text-gray-500")
+        ui.label("Leafmap chưa cài đặt; hiển thị danh sách POI dạng bảng.").classes("text-sm text-gray-400")
     else:
         geo = leafmap.Map(center=[21.0285, 105.8542], zoom=12)
         for poi in _load_pois():
             lat, lon = poi.geometry.coordinates[1], poi.geometry.coordinates[0]
-            geo.add_marker([lat, lon], popup=poi.properties.name)
+            overlay = ", ".join(poi.properties.layers)
+            geo.add_marker([lat, lon], popup=f"{poi.properties.name} — {overlay}")
         map_html = geo.to_html()
         ui.element("iframe").style(
-            "width: 100%; height: 24rem; border: 1px solid #ccc; border-radius: 0.5rem;"
+            "width: 100%; height: 24rem; border: 1px solid #1e293b; border-radius: 0.75rem;"
         ).props(f"srcdoc={json.dumps(map_html)}")
 
     refresh_table()
