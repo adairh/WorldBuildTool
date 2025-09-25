@@ -236,8 +236,4 @@ def map_view() -> None:
 
         render_map(pois)
 
-    def on_startup() -> None:
-        refresh()
-
-    ui.on_startup(on_startup)
     refresh()
