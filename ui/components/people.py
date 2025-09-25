@@ -25,7 +25,11 @@ def people_view() -> None:
         seed_input = ui.number("Seed", value=42, min=0).classes("w-40")
 
         def trigger_generation() -> None:
-            generate_households(int(count_input.value or 1), seed=int(seed_input.value or 0))
+            try:
+                generate_households(int(count_input.value or 1), seed=int(seed_input.value or 0))
+            except ValueError as exc:
+                ui.notify(str(exc), color="negative")
+                return
             refresh_tables()
             ui.notify("Đã sinh hộ dân mới")
 

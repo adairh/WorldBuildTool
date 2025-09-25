@@ -152,6 +152,7 @@ def generate_poi(
     coordinates: List[float] | None = None,
     description: str = "",
     kind: str = "landmark",
+    media: Iterable[str] | None = None,
 ) -> POI:
     poi_id = f"POI-{uuid4().hex[:6].upper()}"
     coords = coordinates or _random_coordinates()
@@ -162,6 +163,7 @@ def generate_poi(
         layers=list(layers or []),
         tags=list(tags or []),
         description=description,
+        media=list(media or []),
     )
     poi = POI(id=poi_id, geometry=geometry, properties=properties)
     existing = list(load_dataset("pois", factory=list))
@@ -170,10 +172,20 @@ def generate_poi(
     return poi
 
 
-def _ensure_base_pois(seed: int | None = None) -> List[POI]:
-    pois = [POI.model_validate(item) for item in load_dataset("pois", factory=list)]
-    if pois:
-        return pois
+def list_pois() -> List[POI]:
+    """Return all stored POIs as models."""
+
+    return [POI.model_validate(item) for item in load_dataset("pois", factory=list)]
+
+
+def seed_default_pois(seed: int | None = None) -> List[POI]:
+    """Populate storage with the default hub templates.
+
+    This is only used for the all-in-one regeneration workflow to provide
+    showcase data. Regular generation paths should rely on user-authored POIs
+    instead of silently injecting fictional hubs.
+    """
+
     _seed_everything(seed or 42)
     generated: List[POI] = []
     for template in HUB_TEMPLATES:
@@ -189,6 +201,55 @@ def _ensure_base_pois(seed: int | None = None) -> List[POI]:
             )
         )
     return generated
+
+
+def update_poi(
+    poi_id: str,
+    *,
+    name: str | None = None,
+    layers: Iterable[str] | None = None,
+    tags: Iterable[str] | None = None,
+    description: str | None = None,
+    kind: str | None = None,
+    media: Iterable[str] | None = None,
+    coordinates: List[float] | None = None,
+) -> POI:
+    """Update a stored POI and return the refreshed model."""
+
+    pois = list_pois()
+    for idx, poi in enumerate(pois):
+        if poi.id != poi_id:
+            continue
+        data = poi.model_dump()
+        if name is not None:
+            data["properties"]["name"] = name
+        if layers is not None:
+            data["properties"]["layers"] = list(layers)
+        if tags is not None:
+            data["properties"]["tags"] = list(tags)
+        if description is not None:
+            data["properties"]["description"] = description
+        if kind is not None:
+            data["properties"]["kind"] = kind
+        if media is not None:
+            data["properties"]["media"] = list(media)
+        if coordinates is not None:
+            data["geometry"]["coordinates"] = coordinates
+        updated = POI.model_validate(data)
+        pois[idx] = updated
+        save_dataset("pois", [item.model_dump() for item in pois])
+        return updated
+    raise ValueError(f"POI '{poi_id}' không tồn tại")
+
+
+def delete_poi(poi_id: str) -> None:
+    """Remove a POI from storage."""
+
+    pois = list_pois()
+    new_pois = [poi for poi in pois if poi.id != poi_id]
+    if len(new_pois) == len(pois):
+        raise ValueError(f"POI '{poi_id}' không tồn tại")
+    save_dataset("pois", [poi.model_dump() for poi in new_pois])
 
 
 def _person_id(idx: int) -> str:
@@ -227,7 +288,9 @@ def _activity_id(idx: int) -> str:
 
 def generate_households(count: int, seed: int | None = None, poi_pool: List[str] | None = None) -> List[Household]:
     _seed_everything(seed)
-    pois = poi_pool or [poi.id for poi in _ensure_base_pois(seed)]
+    pois = poi_pool or [poi.id for poi in list_pois()]
+    if not pois:
+        raise ValueError("Chưa có địa điểm nào để gán hộ dân. Hãy tạo POI trước khi sinh hộ gia đình.")
     households: List[Household] = []
     persons: List[Person] = []
 
@@ -630,7 +693,7 @@ def regenerate_foundation(seed: int = 42) -> Dict[str, List[Dict[str, object]]]:
     save_dataset("items", [])
     save_dataset("activities", [])
 
-    pois = _ensure_base_pois(seed)
+    pois = seed_default_pois(seed)
     households = generate_households(len(pois) * 2, seed=seed, poi_pool=[poi.id for poi in pois])
     events = generate_timeline(14, seed=seed)
     quests = generate_quests(6, seed=seed)

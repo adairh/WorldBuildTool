@@ -1,8 +1,15 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
+from api.services import generate_households
 
 client = TestClient(app)
+
+
+def test_generate_households_requires_pois() -> None:
+    with pytest.raises(ValueError):
+        generate_households(3, seed=1)
 
 
 def test_poi_crud_cycle() -> None:
@@ -30,6 +37,12 @@ def test_poi_crud_cycle() -> None:
     )
     assert update.status_code == 200
     assert "salt" in update.json()["properties"]["tags"]
+
+    delete = client.delete(f"/pois/{poi_id}")
+    assert delete.status_code == 204
+
+    confirm = client.get(f"/pois/{poi_id}")
+    assert confirm.status_code == 404
 
 
 def test_world_dashboard_and_story() -> None:
