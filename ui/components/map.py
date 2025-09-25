@@ -23,8 +23,9 @@ def map_view() -> None:
             city_map = leafmap.Map(center=[21.0285, 105.8542], zoom=11)
             city_map.add_basemap("HYBRID")
             map_html = city_map.to_html()
-            ui.iframe().style("width: 100%; height: 24rem; border: 1px solid #ccc; border-radius: 0.5rem;")\
-                .props(f"srcdoc={json.dumps(map_html)}")
+            ui.element("iframe").style(
+                "width: 100%; height: 24rem; border: 1px solid #ccc; border-radius: 0.5rem;"
+            ).props(f"srcdoc={json.dumps(map_html)}")
         for poi in bundle.pois[:8]:
             with ui.card():
                 ui.label(f"{poi.name} [{poi.category}]")
