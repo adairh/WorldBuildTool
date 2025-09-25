@@ -1,3 +1,5 @@
+import json
+
 from nicegui import ui
 
 from api.schemas import WorldRequest
@@ -20,7 +22,9 @@ def map_view() -> None:
         else:
             city_map = leafmap.Map(center=[21.0285, 105.8542], zoom=11)
             city_map.add_basemap("HYBRID")
-            ui.html(city_map.to_html())
+            map_html = city_map.to_html()
+            ui.iframe().style("width: 100%; height: 24rem; border: 1px solid #ccc; border-radius: 0.5rem;")\
+                .props(f"srcdoc={json.dumps(map_html)}")
         for poi in bundle.pois[:8]:
             with ui.card():
                 ui.label(f"{poi.name} [{poi.category}]")
