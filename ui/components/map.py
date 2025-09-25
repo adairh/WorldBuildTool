@@ -11,8 +11,10 @@ from api.storage import load_dataset
 
 try:  # optional dependency for interactive map
     import leafmap  # type: ignore
+    from ipywidgets import HTML  # type: ignore
 except Exception:  # pragma: no cover - optional dependency missing
     leafmap = None
+    HTML = None  # type: ignore
 
 
 def _load_pois() -> List[POI]:
@@ -87,7 +89,14 @@ def map_view() -> None:
         for poi in _load_pois():
             lat, lon = poi.geometry.coordinates[1], poi.geometry.coordinates[0]
             overlay = ", ".join(poi.properties.layers)
-            geo.add_marker([lat, lon], popup=f"{poi.properties.name} — {overlay}")
+            popup_text = poi.properties.name
+            if overlay:
+                popup_text += f" — {overlay}"
+            if HTML is not None:  # ipywidgets available
+                popup_widget = HTML(value=f"<strong>{popup_text}</strong>")
+            else:  # pragma: no cover - safety fallback
+                popup_widget = None
+            geo.add_marker([lat, lon], popup=popup_widget)
         map_html = geo.to_html()
         ui.element("iframe").style(
             "width: 100%; height: 24rem; border: 1px solid #1e293b; border-radius: 0.75rem;"
