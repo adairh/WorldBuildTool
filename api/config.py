@@ -1,11 +1,64 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-try:  # Pydantic v2 location
-    from pydantic_settings import BaseSettings
-except ImportError:  # pragma: no cover - fallback for Pydantic v1 environments
-    from pydantic import BaseSettings  # type: ignore[assignment]
+def _load_base_settings() -> type:
+    """Return the appropriate ``BaseSettings`` class for the installed stack."""
+
+    try:  # Pydantic v2 location
+        from pydantic_settings import BaseSettings as _BaseSettings
+
+        return _BaseSettings
+    except ImportError:  # pragma: no cover - fallback for Pydantic v1 environments
+        from pydantic import BaseModel, __version__ as pydantic_version
+
+        if pydantic_version.startswith("1."):
+            from pydantic import BaseSettings as _BaseSettings  # type: ignore[assignment]
+
+            return _BaseSettings
+
+        class _CompatBaseSettings(BaseModel):
+            """Very small shim mimicking ``BaseSettings`` for local execution."""
+
+            model_config = {"extra": "ignore"}
+
+            def __init__(self, **data: Any) -> None:  # type: ignore[override]
+                env_values: Dict[str, Any] = {}
+                config = getattr(self.__class__, "Config", None)
+                env_file = getattr(config, "env_file", None)
+                env_encoding = getattr(config, "env_file_encoding", "utf-8")
+
+                if env_file:
+                    self._load_env_file(env_file, env_encoding)
+
+                for name in self.model_fields:
+                    env_key = name.upper()
+                    env_value = os.getenv(env_key)
+                    if env_value is not None:
+                        env_values[name] = env_value
+
+                env_values.update(data)
+                super().__init__(**env_values)
+
+            @staticmethod
+            def _load_env_file(path: str, encoding: str) -> None:
+                try:
+                    with open(path, "r", encoding=encoding) as handle:
+                        for line in handle:
+                            if not line or line.startswith("#"):
+                                continue
+                            if "=" not in line:
+                                continue
+                            key, value = line.strip().split("=", 1)
+                            os.environ.setdefault(key, value)
+                except FileNotFoundError:  # pragma: no cover - optional file
+                    pass
+
+        return _CompatBaseSettings
+
+
+BaseSettings = _load_base_settings()
 
 
 class Settings(BaseSettings):
