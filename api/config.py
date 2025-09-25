@@ -2,7 +2,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from pydantic import BaseSettings
+try:  # Pydantic v2 location
+    from pydantic_settings import BaseSettings
+except ImportError:  # pragma: no cover - fallback for Pydantic v1 environments
+    from pydantic import BaseSettings  # type: ignore[assignment]
 
 
 class Settings(BaseSettings):
@@ -33,7 +36,12 @@ def settings_summary() -> Dict[str, Any]:
     settings = get_settings()
     hidden_keys = {"jwt_secret"}
     summary: Dict[str, Optional[str]] = {}
-    for key, value in settings.dict().items():
+    if hasattr(settings, "model_dump"):
+        raw_settings = settings.model_dump()
+    else:  # pragma: no cover - Pydantic v1 compatibility
+        raw_settings = settings.dict()
+
+    for key, value in raw_settings.items():
         summary[key] = "***" if key in hidden_keys else value
     summary["storage_dir"] = str(Path(settings.storage_dir).expanduser())
     return summary

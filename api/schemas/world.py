@@ -6,6 +6,11 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+try:  # Pydantic v2+ provides ConfigDict
+    from pydantic import ConfigDict
+except ImportError:  # pragma: no cover - fallback for pydantic v1
+    ConfigDict = None  # type: ignore[assignment]
+
 
 class Trait(BaseModel):
     """Describe a unique trait or quirk for a person or household."""
@@ -49,8 +54,11 @@ class Person(BaseModel):
     homePoiId: Optional[str] = None
     relationships: List[Relationship] = Field(default_factory=list)
 
-    class Config:
-        orm_mode = True
+    if ConfigDict is not None:  # pragma: no branch - pydantic v2 path
+        model_config = ConfigDict(from_attributes=True)
+    else:  # pragma: no cover - pydantic v1 compatibility
+        class Config:  # type: ignore[no-redef]
+            orm_mode = True
 
 
 class HouseholdLedger(BaseModel):
