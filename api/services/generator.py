@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from collections import defaultdict
 from datetime import date, timedelta
 from typing import Dict, Iterable, List, Sequence, Tuple
 from uuid import uuid4
@@ -8,24 +9,40 @@ from uuid import uuid4
 from faker import Faker
 
 from ..models import (
+    AccessRequirements,
+    AccessRule,
     Activity,
     ActivitySchedule,
+    City,
+    LevelBand,
+    District,
     EncounterProfile,
+    Festival,
+    FestivalEffects,
+    FactionPresence,
     GameplayFeature,
+    Geometry,
     Household,
     HouseholdLedger,
     HouseholdLocation,
+    Hostility,
     Item,
     LootSource,
+    LawCrimeParams,
+    DistrictCrimeOverride,
     MonsterZone,
+    NPCMix,
     Person,
     POI,
-    Geometry,
     POIProperties,
     Quest,
     DialogueNode,
     StoryArc,
     StoryBeat,
+    TradeNode,
+    TradeRoute,
+    Tuning,
+    ReputationGate,
 )
 from .checker import ESSENTIAL_FEATURES
 from ..storage import load_dataset, save_dataset
@@ -33,51 +50,6 @@ from ..storage import load_dataset, save_dataset
 fake = Faker("vi_VN")
 
 # --- Templates -----------------------------------------------------------------
-
-HUB_TEMPLATES: Sequence[Dict[str, object]] = (
-    {
-        "name": "Hoàng thành Thăng Long",
-        "description": "Trung tâm triều đình, nơi hội tụ main arc và boss quốc gia.",
-        "layers": ["hub", "story", "military"],
-        "tags": ["royal", "boss", "approval"],
-        "kind": "district",
-    },
-    {
-        "name": "Phố Thương Nhân Đồng Xuân",
-        "description": "Chợ chính, tuyến kinh tế và các arc thương hội.",
-        "layers": ["hub", "economy", "craft"],
-        "tags": ["vendor", "quest"],
-        "kind": "market",
-    },
-    {
-        "name": "Khu Đền Quán Trấn Vũ",
-        "description": "Trung tâm tôn giáo và arc tâm linh của dân thành.",
-        "layers": ["hub", "religion", "story"],
-        "tags": ["ritual", "festival"],
-        "kind": "temple",
-    },
-    {
-        "name": "Bến Sông Nhị Hà",
-        "description": "Cửa ngõ thương mại đường thủy, hoạt động vận chuyển.",
-        "layers": ["hub", "transport", "economy"],
-        "tags": ["trade", "fleet"],
-        "kind": "harbor",
-    },
-    {
-        "name": "Phường Thợ Gốm Bát Tràng",
-        "description": "Làng nghề thủ công, quest nghề nghiệp và crafting.",
-        "layers": ["hub", "craft", "story"],
-        "tags": ["crafting", "daily"],
-        "kind": "craft",
-    },
-    {
-        "name": "Giáp Văn Nhân",
-        "description": "Khu học giả, quest nghiên cứu và arc phái văn hiến.",
-        "layers": ["hub", "scholar", "story"],
-        "tags": ["lore", "timeline"],
-        "kind": "district",
-    },
-)
 
 FEATURE_LIBRARY: Sequence[Tuple[str, str]] = (
     ("Arena of the White Tiger", "Arena"),
@@ -117,7 +89,632 @@ QUEST_THEMES: Sequence[str] = (
     "Giải cứu đoàn thương hội",
     "Giao ước với thủy thần",
     "Giữ bí quyết nghề gốm",
-    "Thư họa và kiếm pháp",)
+    "Thư họa và kiếm pháp",
+)
+
+TUNING_DEFAULT = Tuning(
+    food_per_capita=1.0,
+    import_factor={"river": 1.2, "road": 0.9, "mountain": 0.6, "swamp": 0.7},
+    crime_coeffs={"alphaLaw": 0.35, "betaPoverty": 0.3, "gammaHotspot": 0.2, "deltaGuard": 0.55},
+    stability_thresholds={"warn": 55.0, "critical": 40.0},
+    influence_drift={
+        "muCourt": 0.6,
+        "rhoRebel": 0.8,
+        "tauMerchant": 0.7,
+        "psiMonastic": 0.5,
+        "chiSeizure": 0.4,
+        "nuCorruption": 0.5,
+    },
+    gold_per_min=12.0,
+    price_index_clamp={"min": 0.75, "max": 1.35},
+)
+
+DISTRICT_BLUEPRINTS: Sequence[Dict[str, object]] = (
+    {
+        "district_id": "CITADEL",
+        "type": "Citadel",
+        "footprint_area_km2": 0.45,
+        "density_target": 12000,
+        "population": 4052,
+        "crime_base": 0.05,
+        "guard_coverage_base": 0.8,
+        "landmark_tags": ["royal", "approval"],
+    },
+    {
+        "district_id": "MARKET_EAST",
+        "type": "Market",
+        "footprint_area_km2": 0.30,
+        "density_target": 25000,
+        "population": 5740,
+        "crime_base": 0.22,
+        "guard_coverage_base": 0.35,
+        "landmark_tags": ["market", "festival"],
+    },
+    {
+        "district_id": "MARKET_WEST",
+        "type": "Market",
+        "footprint_area_km2": 0.22,
+        "density_target": 21000,
+        "population": 3799,
+        "crime_base": 0.18,
+        "guard_coverage_base": 0.4,
+        "landmark_tags": ["craft", "guild"],
+    },
+    {
+        "district_id": "WHARF",
+        "type": "Wharf",
+        "footprint_area_km2": 0.35,
+        "density_target": 18000,
+        "population": 3292,
+        "crime_base": 0.28,
+        "guard_coverage_base": 0.3,
+        "landmark_tags": ["river", "blackmarket"],
+    },
+    {
+        "district_id": "ARTISAN_QTR",
+        "type": "Artisan",
+        "footprint_area_km2": 0.28,
+        "density_target": 16000,
+        "population": 2195,
+        "crime_base": 0.12,
+        "guard_coverage_base": 0.35,
+        "landmark_tags": ["craft", "orders"],
+    },
+    {
+        "district_id": "BARRACKS",
+        "type": "Barracks",
+        "footprint_area_km2": 0.20,
+        "density_target": 15000,
+        "population": 1519,
+        "crime_base": 0.08,
+        "guard_coverage_base": 0.85,
+        "landmark_tags": ["military", "training"],
+    },
+    {
+        "district_id": "TEMPLES",
+        "type": "Temple",
+        "footprint_area_km2": 0.25,
+        "density_target": 14000,
+        "population": 1604,
+        "crime_base": 0.06,
+        "guard_coverage_base": 0.3,
+        "landmark_tags": ["ritual", "scholar"],
+    },
+    {
+        "district_id": "RESIDENTIAL_N",
+        "type": "Residential",
+        "footprint_area_km2": 0.40,
+        "density_target": 12000,
+        "population": 2870,
+        "crime_base": 0.14,
+        "guard_coverage_base": 0.25,
+        "landmark_tags": ["community", "vendor"],
+    },
+    {
+        "district_id": "RESIDENTIAL_S",
+        "type": "Residential",
+        "footprint_area_km2": 0.25,
+        "density_target": 10000,
+        "population": 929,
+        "crime_base": 0.1,
+        "guard_coverage_base": 0.4,
+        "landmark_tags": ["noble", "garden"],
+    },
+)
+
+NPC_MIX_TABLE: Dict[str, Sequence[Tuple[str, float]]] = {
+    "CITADEL": (
+        ("Bureaucrat", 0.35),
+        ("Guard", 0.35),
+        ("Noble", 0.15),
+        ("Monk", 0.05),
+        ("Scholar", 0.05),
+        ("Servant", 0.05),
+    ),
+    "MARKET_EAST": (
+        ("Merchant", 0.38),
+        ("Artisan", 0.22),
+        ("Commoner", 0.22),
+        ("Guard", 0.08),
+        ("Thief", 0.05),
+        ("Performer", 0.05),
+    ),
+    "MARKET_WEST": (
+        ("Artisan", 0.3),
+        ("Merchant", 0.3),
+        ("Commoner", 0.2),
+        ("Guard", 0.1),
+        ("Thief", 0.05),
+        ("Performer", 0.05),
+    ),
+    "WHARF": (
+        ("Fisher", 0.22),
+        ("Merchant", 0.18),
+        ("Smuggler", 0.12),
+        ("Commoner", 0.28),
+        ("Guard", 0.08),
+        ("Thief", 0.12),
+    ),
+    "ARTISAN_QTR": (
+        ("Artisan", 0.45),
+        ("Merchant", 0.15),
+        ("Commoner", 0.25),
+        ("Guard", 0.05),
+        ("Scholar", 0.05),
+        ("Beggar", 0.05),
+    ),
+    "BARRACKS": (
+        ("Guard", 0.7),
+        ("Recruit", 0.15),
+        ("Trainer", 0.1),
+        ("Merchant", 0.03),
+        ("Healer", 0.02),
+    ),
+    "TEMPLES": (
+        ("Scholar", 0.35),
+        ("Monk", 0.3),
+        ("Commoner", 0.2),
+        ("Performer", 0.05),
+        ("Merchant", 0.05),
+        ("Guard", 0.05),
+    ),
+    "RESIDENTIAL_N": (
+        ("Commoner", 0.6),
+        ("Artisan", 0.15),
+        ("Merchant", 0.05),
+        ("Guard", 0.05),
+        ("Beggar", 0.1),
+        ("Performer", 0.05),
+    ),
+    "RESIDENTIAL_S": (
+        ("Noble", 0.3),
+        ("Servant", 0.3),
+        ("Guard", 0.2),
+        ("Monk", 0.05),
+        ("Scholar", 0.1),
+        ("Merchant", 0.05),
+    ),
+}
+
+TRADE_NODE_BLUEPRINTS: Sequence[Tuple[str, str, str]] = (
+    ("GATE_N", "CITADEL", "Gate"),
+    ("GATE_E", "MARKET_EAST", "Gate"),
+    ("GATE_W", "MARKET_WEST", "Gate"),
+    ("GATE_S", "RESIDENTIAL_N", "Gate"),
+    ("WHARF_TOLICH", "WHARF", "Wharf"),
+    ("WHARF_NHIHA", "WHARF", "Wharf"),
+)
+
+TRADE_ROUTE_BLUEPRINTS: Sequence[Dict[str, object]] = (
+    {
+        "route_id": "RIVER_DELTA",
+        "from_node_id": "RIVER_DELTA",
+        "to_node_id": "WHARF_NHIHA",
+        "distance_km": 38.0,
+        "terrain_share": {"river": 1.0},
+    },
+    {
+        "route_id": "VAN_KIEP",
+        "from_node_id": "VAN_KIEP",
+        "to_node_id": "GATE_N",
+        "distance_km": 65.0,
+        "terrain_share": {"plains": 0.6, "hill": 0.3, "river": 0.1},
+    },
+    {
+        "route_id": "RICE_HEARTLAND",
+        "from_node_id": "RICE_HEARTLAND",
+        "to_node_id": "GATE_S",
+        "distance_km": 52.0,
+        "terrain_share": {"plains": 0.8, "swamp": 0.2},
+    },
+)
+
+FESTIVAL_BLUEPRINTS: Sequence[Dict[str, object]] = (
+    {
+        "festival_id": "ROYAL_SPRING",
+        "name": "Royal Spring Rite",
+        "month": 1,
+        "day": 5,
+        "duration_days": 1,
+        "primary_zone": "CITADEL",
+        "theme": "Royal",
+        "effects": {
+            "vendor_boost_pct": 0.03,
+            "guard_shift": 0.1,
+            "price_delta_pct": 0.03,
+            "quest_unlock_tags": ["Audience Petition"],
+        },
+    },
+    {
+        "festival_id": "LANTERN_FEST",
+        "name": "Lantern Festival",
+        "month": 1,
+        "day": 15,
+        "duration_days": 1,
+        "primary_zone": "MARKET_EAST",
+        "secondary_zones": ["TEMPLES"],
+        "theme": "Lantern",
+        "effects": {
+            "vendor_boost_pct": 0.2,
+            "crime_shift": 0.1,
+            "guard_shift": 0.05,
+            "spawn_overrides": ["pickpocket"],
+            "quest_unlock_tags": ["LanternQuest"],
+        },
+    },
+    {
+        "festival_id": "DRAGON_BOAT",
+        "name": "Dragon Boat Races",
+        "month": 5,
+        "day": 10,
+        "duration_days": 1,
+        "primary_zone": "WHARF",
+        "theme": "River",
+        "effects": {
+            "vendor_boost_pct": 0.15,
+            "guard_shift": 0.1,
+        },
+    },
+    {
+        "festival_id": "LITERARY_EXAMS",
+        "name": "Literary Exams",
+        "month": 8,
+        "day": 1,
+        "duration_days": 5,
+        "primary_zone": "TEMPLES",
+        "theme": "Literary",
+        "effects": {
+            "vendor_boost_pct": 0.05,
+            "guard_shift": 0.08,
+            "quest_unlock_tags": ["ScholarTrials"],
+        },
+    },
+    {
+        "festival_id": "HARVEST_FAIR",
+        "name": "Harvest Fair",
+        "month": 8,
+        "day": 15,
+        "duration_days": 1,
+        "primary_zone": "MARKET_EAST",
+        "secondary_zones": ["MARKET_WEST"],
+        "theme": "Harvest",
+        "effects": {
+            "vendor_boost_pct": 0.15,
+            "crime_shift": 0.08,
+            "price_delta_pct": -0.05,
+            "guard_shift": 0.05,
+        },
+    },
+)
+
+FACTION_PRESENCE_BLUEPRINTS: Sequence[Tuple[str, str, int]] = (
+    ("Court", "CITADEL", 90),
+    ("Court", "BARRACKS", 75),
+    ("Court", "TEMPLES", 40),
+    ("Court", "MARKET_EAST", 35),
+    ("Court", "MARKET_WEST", 35),
+    ("Court", "WHARF", 30),
+    ("Court", "RESIDENTIAL_S", 55),
+    ("Merchants", "MARKET_EAST", 70),
+    ("Merchants", "MARKET_WEST", 65),
+    ("Merchants", "WHARF", 55),
+    ("Merchants", "ARTISAN_QTR", 50),
+    ("Monastic", "TEMPLES", 80),
+    ("Monastic", "RESIDENTIAL_S", 25),
+    ("Monastic", "CITADEL", 20),
+    ("Rebels", "WHARF", 35),
+    ("Rebels", "MARKET_EAST", 25),
+    ("Thieves", "WHARF", 30),
+    ("Thieves", "MARKET_EAST", 25),
+)
+
+HOSTILITY_BLUEPRINTS: Sequence[Tuple[str, str, int]] = (
+    ("Court", "Rebels", -70),
+    ("Court", "Thieves", -60),
+    ("Merchants", "Thieves", -30),
+    ("Rebels", "Thieves", 20),
+    ("Merchants", "Court", 20),
+)
+
+ACCESS_RULE_BLUEPRINTS: Sequence[Dict[str, object]] = (
+    {
+        "access_rule_id": "COURT_INNER",
+        "requires": {
+            "story_flags": ["Main_ThangLong_Act1_Cleared"],
+            "reputation": [{"faction_id": "Court", "min": 30}],
+        },
+    },
+    {
+        "access_rule_id": "ARCHIVE_ONLY",
+        "requires": {
+            "story_flags": ["ScholarTrials"],
+            "reputation": [{"faction_id": "Court", "min": 20}],
+        },
+    },
+    {
+        "access_rule_id": "BLACK_MARKET",
+        "requires": {
+            "reputation": [{"faction_id": "Thieves", "min": 10}],
+            "bribe_allowed": True,
+        },
+    },
+)
+
+CRIME_OVERRIDES: Sequence[Tuple[str, bool, bool]] = (
+    ("WHARF", True, True),
+    ("MARKET_EAST", True, False),
+    ("MARKET_WEST", False, False),
+)
+
+POI_BLUEPRINTS: Sequence[Dict[str, object]] = (
+    {
+        "name": "Hoàng thành Thăng Long",
+        "district_id": "CITADEL",
+        "kind": "district_hub",
+        "layers": ["hub", "story", "military"],
+        "tags": ["royal", "boss", "approval"],
+        "description": "Trung tâm triều đình, nơi hội tụ main arc và boss quốc gia.",
+        "owner_faction": "Court",
+        "open_hours": ["Dawn", "Day"],
+        "capacity": 240,
+        "services": ["Ceremony", "Records"],
+    },
+    {
+        "name": "Thư Viện Quốc Sử",
+        "district_id": "CITADEL",
+        "kind": "archive",
+        "layers": ["story", "scholar"],
+        "tags": ["records", "quest"],
+        "description": "Kho tư liệu của triều đình.",
+        "owner_faction": "Court",
+        "open_hours": ["Day"],
+        "capacity": 80,
+        "services": ["Records"],
+        "access_rule_id": "ARCHIVE_ONLY",
+    },
+    {
+        "name": "Ngân Khố Đại Việt",
+        "district_id": "CITADEL",
+        "kind": "treasury",
+        "layers": ["economy", "military"],
+        "tags": ["treasury", "raid"],
+        "description": "Kho bạc quốc gia với bảo vật trấn quốc.",
+        "owner_faction": "Court",
+        "open_hours": ["Dawn"],
+        "capacity": 60,
+        "services": ["Ceremony"],
+        "access_rule_id": "COURT_INNER",
+    },
+    {
+        "name": "Tháp Canh Đông",
+        "district_id": "CITADEL",
+        "kind": "guard_tower",
+        "layers": ["military"],
+        "tags": ["guard"],
+        "description": "Tháp canh trấn thủ cửa đông.",
+        "owner_faction": "Court",
+        "open_hours": ["All"],
+        "capacity": 60,
+        "services": ["Patrol"],
+    },
+    {
+        "name": "Đồng Xuân Bazaar",
+        "district_id": "MARKET_EAST",
+        "kind": "market",
+        "layers": ["hub", "economy"],
+        "tags": ["vendor", "festival"],
+        "description": "Trung tâm thương mại lớn nhất Thăng Long.",
+        "owner_faction": "Merchants",
+        "open_hours": ["Day", "Dusk"],
+        "capacity": 600,
+        "services": ["Auction", "Repairs"],
+    },
+    {
+        "name": "Đại Sảnh Đấu Giá",
+        "district_id": "MARKET_EAST",
+        "kind": "auction",
+        "layers": ["economy", "story"],
+        "tags": ["rare", "quest"],
+        "description": "Nơi các thương hội tranh đoạt hàng quý." ,
+        "owner_faction": "Merchants",
+        "open_hours": ["Day"],
+        "capacity": 200,
+        "services": ["Auction"],
+    },
+    {
+        "name": "Hội Quán Lồng Đèn",
+        "district_id": "MARKET_EAST",
+        "kind": "festival_square",
+        "layers": ["festival", "story"],
+        "tags": ["lantern", "event"],
+        "description": "Quảng trường chính của lễ hội Lồng Đèn.",
+        "owner_faction": "Merchants",
+        "open_hours": ["Dusk", "Night"],
+        "capacity": 350,
+        "services": ["Performance", "Quest Board"],
+    },
+    {
+        "name": "Phố Nghề Bang Hội",
+        "district_id": "MARKET_WEST",
+        "kind": "guild_row",
+        "layers": ["hub", "craft"],
+        "tags": ["guild", "crafting"],
+        "description": "Nơi tập trung các phường hội và sạp đặc sản.",
+        "owner_faction": "Merchants",
+        "open_hours": ["Day"],
+        "capacity": 280,
+        "services": ["Craft_Tailor", "Craft_Forge"],
+    },
+    {
+        "name": "Lò Rèn Bạch Hổ",
+        "district_id": "MARKET_WEST",
+        "kind": "forge",
+        "layers": ["craft", "martial"],
+        "tags": ["weapon", "upgrade"],
+        "description": "Xưởng rèn vũ khí cao cấp cho võ lâm.",
+        "owner_faction": "Merchants",
+        "open_hours": ["Day"],
+        "capacity": 120,
+        "services": ["Craft_Forge", "Repairs"],
+    },
+    {
+        "name": "Bến Nhị Hà",
+        "district_id": "WHARF",
+        "kind": "wharf",
+        "layers": ["hub", "transport"],
+        "tags": ["river", "trade"],
+        "description": "Bến chính giao thương đường thủy.",
+        "owner_faction": "Merchants",
+        "open_hours": ["Dawn", "Day", "Dusk"],
+        "capacity": 400,
+        "services": ["Transport", "Storage"],
+    },
+    {
+        "name": "Văn Phòng Thuế Quan",
+        "district_id": "WHARF",
+        "kind": "office",
+        "layers": ["economy", "politics"],
+        "tags": ["customs", "quest"],
+        "description": "Điểm kiểm soát thuế và giấy phép thuyền bè.",
+        "owner_faction": "Court",
+        "open_hours": ["Day"],
+        "capacity": 110,
+        "services": ["Contracts"],
+    },
+    {
+        "name": "Lối Vào Chợ Đen",
+        "district_id": "WHARF",
+        "kind": "blackmarket",
+        "layers": ["underground", "economy"],
+        "tags": ["smuggling", "rare"],
+        "description": "Cửa hầm dẫn tới chợ đen bí mật.",
+        "owner_faction": "Thieves",
+        "open_hours": ["Night"],
+        "capacity": 40,
+        "services": ["BlackMarket"],
+        "access_rule_id": "BLACK_MARKET",
+    },
+    {
+        "name": "Làng Nghề Bát Tràng",
+        "district_id": "ARTISAN_QTR",
+        "kind": "craft_hub",
+        "layers": ["hub", "craft"],
+        "tags": ["ceramic", "daily"],
+        "description": "Trung tâm sinh hoạt của thợ gốm.",
+        "owner_faction": "Merchants",
+        "open_hours": ["Day"],
+        "capacity": 220,
+        "services": ["Craft_Herbal", "Craft_Forge"],
+    },
+    {
+        "name": "Xưởng Đồng Long",
+        "district_id": "ARTISAN_QTR",
+        "kind": "foundry",
+        "layers": ["craft", "story"],
+        "tags": ["bronze", "quest"],
+        "description": "Xưởng đúc chuông và vũ khí đồng.",
+        "owner_faction": "Merchants",
+        "open_hours": ["Day"],
+        "capacity": 90,
+        "services": ["Craft_Forge"],
+    },
+    {
+        "name": "Doanh Trại Vệ Binh",
+        "district_id": "BARRACKS",
+        "kind": "barracks",
+        "layers": ["hub", "military"],
+        "tags": ["training", "quest"],
+        "description": "Trung tâm đóng quân của vệ binh hoàng gia.",
+        "owner_faction": "Court",
+        "open_hours": ["All"],
+        "capacity": 260,
+        "services": ["Arena", "Training"],
+    },
+    {
+        "name": "Sân Tập Bạch Hổ",
+        "district_id": "BARRACKS",
+        "kind": "training_ground",
+        "layers": ["martial"],
+        "tags": ["sparring", "trial"],
+        "description": "Sân tập luyện kiếm pháp và võ thuật.",
+        "owner_faction": "Court",
+        "open_hours": ["Dawn", "Day"],
+        "capacity": 150,
+        "services": ["Arena"],
+    },
+    {
+        "name": "Văn Miếu",
+        "district_id": "TEMPLES",
+        "kind": "temple",
+        "layers": ["hub", "culture"],
+        "tags": ["exam", "ritual"],
+        "description": "Nơi tổ chức khoa cử và lễ tế Khổng Tử.",
+        "owner_faction": "Monastic",
+        "open_hours": ["Day"],
+        "capacity": 300,
+        "services": ["Exam", "Performance"],
+    },
+    {
+        "name": "Đền Trấn Vũ",
+        "district_id": "TEMPLES",
+        "kind": "pagoda",
+        "layers": ["religion", "story"],
+        "tags": ["ritual", "festival"],
+        "description": "Ngôi đền linh thiêng bảo hộ kinh thành.",
+        "owner_faction": "Monastic",
+        "open_hours": ["Dawn", "Day", "Dusk"],
+        "capacity": 180,
+        "services": ["Ritual"],
+    },
+    {
+        "name": "Phố Bắc Phường",
+        "district_id": "RESIDENTIAL_N",
+        "kind": "residential",
+        "layers": ["hub", "community"],
+        "tags": ["commoner", "vendor"],
+        "description": "Khu dân cư tấp nập của thường dân.",
+        "owner_faction": "Court",
+        "open_hours": ["All"],
+        "capacity": 240,
+        "services": ["Quest Board", "Vendor"],
+    },
+    {
+        "name": "Giếng Đông",
+        "district_id": "RESIDENTIAL_N",
+        "kind": "well",
+        "layers": ["community"],
+        "tags": ["water", "gather"],
+        "description": "Giếng nước công cộng phục vụ dân cư.",
+        "owner_faction": "Court",
+        "open_hours": ["All"],
+        "capacity": 90,
+        "services": ["Vendor"],
+    },
+    {
+        "name": "Trại Gia Viên",
+        "district_id": "RESIDENTIAL_S",
+        "kind": "noble_estate",
+        "layers": ["hub", "noble"],
+        "tags": ["noble", "garden"],
+        "description": "Khu dinh thự của các đại gia tộc.",
+        "owner_faction": "Court",
+        "open_hours": ["Day"],
+        "capacity": 160,
+        "services": ["Social"],
+    },
+    {
+        "name": "Tư Đình Tư Gia",
+        "district_id": "RESIDENTIAL_S",
+        "kind": "private_shrine",
+        "layers": ["religion", "noble"],
+        "tags": ["ritual", "secret"],
+        "description": "Điện thờ gia tổ của quý tộc.",
+        "owner_faction": "Monastic",
+        "open_hours": ["Dawn", "Dusk"],
+        "capacity": 60,
+        "services": ["Ritual"],
+    },
+)
 
 
 # --- Helpers -------------------------------------------------------------------
@@ -144,15 +741,133 @@ def _polygon_around(center: List[float], spread: float = 0.01) -> List[List[floa
     ]
 
 
+def seed_tuning() -> Tuning:
+    save_dataset("tuning", TUNING_DEFAULT.model_dump())
+    return TUNING_DEFAULT
+
+
+def seed_city(tuning: Tuning) -> City:
+    population_target = 26000
+    city = City(
+        city_id="THANG_LONG",
+        name="Thăng Long Thành",
+        role="CapitalHub",
+        level_band=LevelBand(min=20, max=45),
+        population_target=population_target,
+        food_import_need=population_target * tuning.food_per_capita,
+        stability_target=68.0,
+        entry_gates=["N", "E", "S", "W"],
+        wharves=["To_Lich", "Nhi_Ha"],
+    )
+    save_dataset("city", city.model_dump())
+    return city
+
+
+def seed_districts(city: City) -> List[District]:
+    districts = [District(city_id=city.city_id, **blueprint) for blueprint in DISTRICT_BLUEPRINTS]
+    save_dataset("districts", [district.model_dump() for district in districts])
+    return districts
+
+
+def seed_npc_mix() -> List[NPCMix]:
+    entries: List[NPCMix] = []
+    for district_id, mix in NPC_MIX_TABLE.items():
+        total = sum(ratio for _, ratio in mix)
+        for archetype, ratio in mix:
+            entries.append(NPCMix(district_id=district_id, archetype=archetype, ratio=round(ratio / total, 4)))
+    save_dataset("npc_mix", [entry.model_dump() for entry in entries])
+    return entries
+
+
+def seed_trade_network(city: City) -> Tuple[List[TradeNode], List[TradeRoute]]:
+    nodes = [TradeNode(node_id=node_id, district_id=district_id, node_type=node_type) for node_id, district_id, node_type in TRADE_NODE_BLUEPRINTS]
+    routes = [TradeRoute(**blueprint) for blueprint in TRADE_ROUTE_BLUEPRINTS]
+    save_dataset("trade_nodes", [node.model_dump() for node in nodes])
+    save_dataset("trade_routes", [route.model_dump() for route in routes])
+    return nodes, routes
+
+
+def seed_festivals() -> List[Festival]:
+    festivals = [
+        Festival(
+            festival_id=spec["festival_id"],
+            name=spec["name"],
+            month=spec["month"],
+            day=spec["day"],
+            duration_days=spec["duration_days"],
+            primary_zone=spec["primary_zone"],
+            secondary_zones=list(spec.get("secondary_zones", [])),
+            theme=spec["theme"],
+            effects=FestivalEffects(**spec["effects"]),
+        )
+        for spec in FESTIVAL_BLUEPRINTS
+    ]
+    save_dataset("festivals", [festival.model_dump() for festival in festivals])
+    return festivals
+
+
+def seed_factions() -> Tuple[List[FactionPresence], List[Hostility]]:
+    presence = [
+        FactionPresence(faction_id=faction_id, district_id=district_id, influence=influence)
+        for faction_id, district_id, influence in FACTION_PRESENCE_BLUEPRINTS
+    ]
+    hostility = [
+        Hostility(faction_a=a, faction_b=b, value=value)
+        for a, b, value in HOSTILITY_BLUEPRINTS
+    ]
+    save_dataset("faction_presence", [entry.model_dump() for entry in presence])
+    save_dataset("hostility", [entry.model_dump() for entry in hostility])
+    return presence, hostility
+
+
+def seed_access_rules() -> List[AccessRule]:
+    rules = [
+        AccessRule(
+            access_rule_id=spec["access_rule_id"],
+            requires=AccessRequirements(
+                story_flags=list(spec.get("requires", {}).get("story_flags", [])),
+                reputation=[ReputationGate(**gate) for gate in spec.get("requires", {}).get("reputation", [])],
+                attire_tags=list(spec.get("requires", {}).get("attire_tags", [])),
+                bribe_allowed=bool(spec.get("requires", {}).get("bribe_allowed", False)),
+            ),
+        )
+        for spec in ACCESS_RULE_BLUEPRINTS
+    ]
+    save_dataset("access_rules", [rule.model_dump() for rule in rules])
+    return rules
+
+
+def seed_law_and_crime(city: City) -> Tuple[LawCrimeParams, List[DistrictCrimeOverride]]:
+    params = LawCrimeParams(
+        city_id=city.city_id,
+        lawfulness_base=0.68,
+        high_crime_threshold=0.3,
+        guard_effectiveness=420.0,
+    )
+    overrides = [
+        DistrictCrimeOverride(district_id=district_id, hotspot=hotspot, black_market_flag=black_market)
+        for district_id, hotspot, black_market in CRIME_OVERRIDES
+    ]
+    save_dataset("law_params", params.model_dump())
+    save_dataset("district_crime", [override.model_dump() for override in overrides])
+    return params, overrides
+
+
 def generate_poi(
     name: str,
     layers: Iterable[str] | None = None,
     tags: Iterable[str] | None = None,
     *,
+    district_id: str,
     coordinates: List[float] | None = None,
     description: str = "",
     kind: str = "landmark",
     media: Iterable[str] | None = None,
+    owner_faction: str | None = None,
+    open_hours: Iterable[str] | None = None,
+    capacity: int = 0,
+    services: Iterable[str] | None = None,
+    access_rule_id: str | None = None,
 ) -> POI:
     poi_id = f"POI-{uuid4().hex[:6].upper()}"
     coords = coordinates or _random_coordinates()
@@ -164,8 +879,13 @@ def generate_poi(
         tags=list(tags or []),
         description=description,
         media=list(media or []),
+        owner_faction_id=owner_faction,
+        open_hours=list(open_hours or []),
+        capacity=capacity,
+        services=list(services or []),
+        access_rule_id=access_rule_id,
     )
-    poi = POI(id=poi_id, geometry=geometry, properties=properties)
+    poi = POI(id=poi_id, district_id=district_id, geometry=geometry, properties=properties)
     existing = list(load_dataset("pois", factory=list))
     existing.append(poi.model_dump())
     save_dataset("pois", existing)
@@ -188,16 +908,23 @@ def seed_default_pois(seed: int | None = None) -> List[POI]:
 
     _seed_everything(seed or 42)
     generated: List[POI] = []
-    for template in HUB_TEMPLATES:
+    for template in POI_BLUEPRINTS:
         coords = _random_coordinates()
         generated.append(
             generate_poi(
                 template["name"],
-                layers=template["layers"],
-                tags=template["tags"],
+                layers=template.get("layers"),
+                tags=template.get("tags"),
+                district_id=str(template["district_id"]),
                 coordinates=coords,
-                description=template["description"],
-                kind=str(template["kind"]),
+                description=str(template.get("description", "")),
+                kind=str(template.get("kind", "landmark")),
+                media=template.get("media"),
+                owner_faction=template.get("owner_faction"),
+                open_hours=template.get("open_hours"),
+                capacity=int(template.get("capacity", 0)),
+                services=template.get("services"),
+                access_rule_id=template.get("access_rule_id"),
             )
         )
     return generated
@@ -213,6 +940,12 @@ def update_poi(
     kind: str | None = None,
     media: Iterable[str] | None = None,
     coordinates: List[float] | None = None,
+    district_id: str | None = None,
+    owner_faction: str | None = None,
+    open_hours: Iterable[str] | None = None,
+    capacity: int | None = None,
+    services: Iterable[str] | None = None,
+    access_rule_id: str | None = None,
 ) -> POI:
     """Update a stored POI and return the refreshed model."""
 
@@ -235,6 +968,18 @@ def update_poi(
             data["properties"]["media"] = list(media)
         if coordinates is not None:
             data["geometry"]["coordinates"] = coordinates
+        if district_id is not None:
+            data["district_id"] = district_id
+        if owner_faction is not None:
+            data["properties"]["owner_faction_id"] = owner_faction
+        if open_hours is not None:
+            data["properties"]["open_hours"] = list(open_hours)
+        if capacity is not None:
+            data["properties"]["capacity"] = capacity
+        if services is not None:
+            data["properties"]["services"] = list(services)
+        if access_rule_id is not None:
+            data["properties"]["access_rule_id"] = access_rule_id
         updated = POI.model_validate(data)
         pois[idx] = updated
         save_dataset("pois", [item.model_dump() for item in pois])
@@ -288,34 +1033,61 @@ def _activity_id(idx: int) -> str:
 
 def generate_households(count: int, seed: int | None = None, poi_pool: List[str] | None = None) -> List[Household]:
     _seed_everything(seed)
-    pois = poi_pool or [poi.id for poi in list_pois()]
-    if not pois:
+
+    poi_models = list_pois()
+    if poi_pool is not None:
+        poi_models = [poi for poi in poi_models if poi.id in poi_pool]
+    if not poi_models:
         raise ValueError("Chưa có địa điểm nào để gán hộ dân. Hãy tạo POI trước khi sinh hộ gia đình.")
+
+    districts = [District.model_validate(item) for item in load_dataset("districts", factory=list)]
+    npc_mix = [NPCMix.model_validate(item) for item in load_dataset("npc_mix", factory=list)]
+    faction_presence = load_dataset("faction_presence", factory=list)
+
+    pois_by_district: Dict[str, List[str]] = defaultdict(list)
+    for poi in poi_models:
+        pois_by_district[poi.district_id].append(poi.id)
+
+    district_weights: List[Tuple[str, float]] = [
+        (district.district_id, max(float(district.population), 1.0)) for district in districts
+    ]
+    if not district_weights:
+        district_weights = [("UNASSIGNED", 1.0)]
+
+    mix_by_district: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
+    for mix in npc_mix:
+        mix_by_district[mix.district_id].append((mix.archetype, max(mix.ratio, 0.01)))
+
+    allegiance_pool = sorted({entry["faction_id"] for entry in faction_presence}) or [
+        "Triều đình",
+        "Thương hội",
+        "Tế đàn",
+        "Thủy quân",
+        "Nghề thủ công",
+        "Văn phái",
+    ]
+
     households: List[Household] = []
     persons: List[Person] = []
 
-    districts = [
-        "Hoàng thành",
-        "Đồng Xuân",
-        "Trấn Vũ",
-        "Nhị Hà",
-        "Bát Tràng",
-        "Văn Nhân",
-    ]
-    allegiances = ["Triều đình", "Thương hội", "Tế đàn", "Thủy quân", "Nghề thủ công", "Văn phái"]
-    specialties = ["quan lại", "thương nhân", "thầy cúng", "thủy thủ", "thợ gốm", "học giả"]
+    def pick_district() -> str:
+        labels, weights = zip(*district_weights)
+        return random.choices(labels, weights=weights, k=1)[0]
 
     for idx in range(count):
         household_id = _household_id(idx + 1)
-        location = HouseholdLocation(poi_id=random.choice(pois) if pois else None)
+        district_id = pick_district()
+        district_pois = pois_by_district.get(district_id) or [poi.id for poi in poi_models]
+        location = HouseholdLocation(poi_id=random.choice(district_pois))
         member_count = random.randint(3, 5)
         members: List[Person] = []
+        mix = mix_by_district.get(district_id) or [("Commoner", 1.0)]
+        mix_labels, mix_weights = zip(*mix)
+
         for member_idx in range(member_count):
             sex = random.choice(["M", "F"])
             birth_year = random.randint(1240, 1275)
-            profession = random.choice(
-                ["quan lại", "thương nhân", "thợ gốm", "thầy đồ", "binh sĩ", "ngư dân", "ngự y"]
-            )
+            profession = random.choices(mix_labels, weights=mix_weights, k=1)[0]
             person = Person(
                 person_id=_person_id(len(persons) + 1),
                 name=fake.name_male() if sex == "M" else fake.name_female(),
@@ -335,13 +1107,15 @@ def generate_households(count: int, seed: int | None = None, poi_pool: List[str]
             influence=random.randint(0, 100),
             artisans=random.randint(1, 10),
         )
+
+        specialty = random.choices(mix_labels, weights=mix_weights, k=1)[0]
         household = Household(
             household_id=household_id,
             house_type=random.choice(["nhà 3 gian", "nhà ống", "nhà mái ngói", "nhà sàn"]),
             status="occupied",
-            district=random.choice(districts),
-            allegiance=random.choice(allegiances),
-            specialty=random.choice(specialties),
+            district=district_id,
+            allegiance=random.choice(allegiance_pool),
+            specialty=specialty,
             location=location,
             members=members,
             notes=f"Seed {seed}" if seed is not None else None,
@@ -692,7 +1466,28 @@ def regenerate_foundation(seed: int = 42) -> Dict[str, List[Dict[str, object]]]:
     save_dataset("features", [])
     save_dataset("items", [])
     save_dataset("activities", [])
+    save_dataset("city", {})
+    save_dataset("districts", [])
+    save_dataset("npc_mix", [])
+    save_dataset("trade_nodes", [])
+    save_dataset("trade_routes", [])
+    save_dataset("festivals", [])
+    save_dataset("faction_presence", [])
+    save_dataset("hostility", [])
+    save_dataset("access_rules", [])
+    save_dataset("law_params", {})
+    save_dataset("district_crime", [])
+    save_dataset("tuning", {})
 
+    tuning = seed_tuning()
+    city = seed_city(tuning)
+    districts = seed_districts(city)
+    npc_mix = seed_npc_mix()
+    trade_nodes, trade_routes = seed_trade_network(city)
+    festivals = seed_festivals()
+    faction_presence, hostility = seed_factions()
+    access_rules = seed_access_rules()
+    law_params, crime_overrides = seed_law_and_crime(city)
     pois = seed_default_pois(seed)
     households = generate_households(len(pois) * 2, seed=seed, poi_pool=[poi.id for poi in pois])
     events = generate_timeline(14, seed=seed)
@@ -704,6 +1499,17 @@ def regenerate_foundation(seed: int = 42) -> Dict[str, List[Dict[str, object]]]:
     items = generate_items(quests, zones, features, seed=seed)
 
     return {
+        "city": [city.model_dump()],
+        "districts": [district.model_dump() for district in districts],
+        "npc_mix": [entry.model_dump() for entry in npc_mix],
+        "trade_nodes": [node.model_dump() for node in trade_nodes],
+        "trade_routes": [route.model_dump() for route in trade_routes],
+        "festivals": [festival.model_dump() for festival in festivals],
+        "faction_presence": [entry.model_dump() for entry in faction_presence],
+        "hostility": [entry.model_dump() for entry in hostility],
+        "access_rules": [rule.model_dump() for rule in access_rules],
+        "law_params": [law_params.model_dump()],
+        "district_crime": [override.model_dump() for override in crime_overrides],
         "pois": [poi.model_dump() for poi in pois],
         "households": [household.model_dump() for household in households],
         "events": events,

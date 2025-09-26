@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from nicegui import ui
 
 from api.models import POI
 from api.services import delete_poi, generate_poi, list_pois, update_poi, validation_summary
+from api.storage import load_dataset
 
 try:  # optional dependency for interactive map
     import leafmap  # type: ignore
@@ -32,6 +33,9 @@ def map_view() -> None:
     """Map & Spatial pillar overview with full POI control."""
 
     summary = validation_summary()
+    districts = [item for item in load_dataset("districts", factory=list)]
+    access_rules = [item for item in load_dataset("access_rules", factory=list)]
+    factions = sorted({entry.get("faction_id") for entry in load_dataset("faction_presence", factory=list)})
 
     with ui.grid(columns=3).classes("gap-4 w-full"):
         for label, key in (
@@ -57,9 +61,19 @@ def map_view() -> None:
                     layer_input = ui.input("Layers (phân tách bằng dấu phẩy)").classes("w-60")
                     tag_input = ui.input("Tags").classes("w-52")
                 with ui.row().classes("gap-3 flex-wrap"):
+                    district_options = [item["district_id"] for item in districts]
+                    district_select = ui.select(district_options, label="Quận").classes("w-48")
+                    faction_select = ui.select(factions, label="Phe phái", with_input=True).classes("w-48") if factions else ui.input("Phe phái").classes("w-48")
+                with ui.row().classes("gap-3 flex-wrap"):
                     lon_input = ui.number("Kinh độ", step=0.0001).classes("w-40")
                     lat_input = ui.number("Vĩ độ", step=0.0001).classes("w-40")
                     kind_input = ui.input("Loại").classes("w-40")
+                with ui.row().classes("gap-3 flex-wrap"):
+                    open_hours_input = ui.input("Giờ mở (ví dụ: Dawn,Day)").classes("w-48")
+                    services_input = ui.input("Dịch vụ").classes("w-48")
+                    capacity_input = ui.number("Sức chứa", value=0, min=0).classes("w-32")
+                access_options = [rule["access_rule_id"] for rule in access_rules]
+                access_select = ui.select(access_options, label="Access Rule", with_input=True).classes("w-48") if access_options else ui.input("Access Rule").classes("w-48")
                 description_input = ui.textarea("Mô tả").props("rows=2").classes("w-full")
 
                 def handle_create() -> None:
@@ -67,13 +81,22 @@ def map_view() -> None:
                         coords = None
                         if lon_input.value is not None and lat_input.value is not None:
                             coords = [float(lon_input.value), float(lat_input.value)]
+                        district_id = getattr(district_select, "value", None)
+                        if not district_id:
+                            raise ValueError("Cần chọn quận cho POI")
                         poi = generate_poi(
                             name_input.value or "POI mới",
                             layers=_parse_csv(layer_input.value),
                             tags=_parse_csv(tag_input.value),
                             coordinates=coords,
+                            district_id=district_id,
                             description=description_input.value or "",
                             kind=kind_input.value or "landmark",
+                            owner_faction=(faction_select.value if hasattr(faction_select, "value") else None),
+                            open_hours=_parse_csv(open_hours_input.value),
+                            capacity=int(capacity_input.value or 0),
+                            services=_parse_csv(services_input.value),
+                            access_rule_id=(access_select.value if hasattr(access_select, "value") else None),
                         )
                         selection_state["id"] = poi.id
                         refresh()
@@ -85,6 +108,14 @@ def map_view() -> None:
                         lon_input.value = None
                         lat_input.value = None
                         kind_input.value = ""
+                        open_hours_input.value = ""
+                        services_input.value = ""
+                        capacity_input.value = 0
+                        district_select.value = None  # type: ignore[assignment]
+                        if hasattr(faction_select, "value"):
+                            faction_select.value = None  # type: ignore[attr-defined]
+                        if hasattr(access_select, "value"):
+                            access_select.value = None  # type: ignore[attr-defined]
                     except Exception as exc:  # pragma: no cover - user input errors
                         ui.notify(f"Không thể tạo POI: {exc}", color="negative")
 
@@ -98,8 +129,14 @@ def map_view() -> None:
                 edit_layers = ui.input("Layers (phân tách bằng dấu phẩy)").classes("w-full")
                 edit_tags = ui.input("Tags").classes("w-full")
                 edit_media = ui.input("Media (URL, phân tách bằng dấu phẩy)").classes("w-full")
+                edit_district = ui.select([item["district_id"] for item in districts], label="Quận").classes("w-full")
+                edit_faction = ui.select(factions, label="Phe phái", with_input=True).classes("w-full") if factions else ui.input("Phe phái").classes("w-full")
                 edit_lon = ui.number("Kinh độ", step=0.0001).classes("w-40")
                 edit_lat = ui.number("Vĩ độ", step=0.0001).classes("w-40")
+                edit_open_hours = ui.input("Giờ mở").classes("w-full")
+                edit_capacity = ui.number("Sức chứa", min=0).classes("w-40")
+                edit_services = ui.input("Dịch vụ").classes("w-full")
+                edit_access = ui.select([item["access_rule_id"] for item in access_rules], label="Access Rule", with_input=True).classes("w-full") if access_rules else ui.input("Access Rule").classes("w-full")
                 edit_description = ui.textarea("Mô tả").props("rows=3").classes("w-full")
 
                 def populate_form(poi: Optional[POI]) -> None:
@@ -109,8 +146,16 @@ def map_view() -> None:
                         edit_layers.value = ""
                         edit_tags.value = ""
                         edit_media.value = ""
+                        edit_district.value = None  # type: ignore[assignment]
+                        if hasattr(edit_faction, "value"):
+                            edit_faction.value = None  # type: ignore[attr-defined]
                         edit_lon.value = None
                         edit_lat.value = None
+                        edit_open_hours.value = ""
+                        edit_capacity.value = 0
+                        edit_services.value = ""
+                        if hasattr(edit_access, "value"):
+                            edit_access.value = None  # type: ignore[attr-defined]
                         edit_description.value = ""
                         return
                     edit_name.value = poi.properties.name
@@ -118,8 +163,16 @@ def map_view() -> None:
                     edit_layers.value = _format_csv(poi.properties.layers)
                     edit_tags.value = _format_csv(poi.properties.tags)
                     edit_media.value = _format_csv(poi.properties.media)
+                    edit_district.value = poi.district_id  # type: ignore[assignment]
+                    if hasattr(edit_faction, "value"):
+                        edit_faction.value = poi.properties.owner_faction_id  # type: ignore[attr-defined]
                     edit_lon.value = poi.geometry.coordinates[0]
                     edit_lat.value = poi.geometry.coordinates[1]
+                    edit_open_hours.value = _format_csv(poi.properties.open_hours)
+                    edit_capacity.value = poi.properties.capacity
+                    edit_services.value = _format_csv(poi.properties.services)
+                    if hasattr(edit_access, "value"):
+                        edit_access.value = poi.properties.access_rule_id  # type: ignore[attr-defined]
                     edit_description.value = poi.properties.description
 
                 def handle_selection(value: Optional[str]) -> None:
@@ -148,6 +201,12 @@ def map_view() -> None:
                             media=_parse_csv(edit_media.value),
                             description=edit_description.value or "",
                             coordinates=coords,
+                            district_id=edit_district.value if hasattr(edit_district, "value") else None,
+                            owner_faction=getattr(edit_faction, "value", None),
+                            open_hours=_parse_csv(edit_open_hours.value),
+                            capacity=int(edit_capacity.value or 0),
+                            services=_parse_csv(edit_services.value),
+                            access_rule_id=getattr(edit_access, "value", None),
                         )
                         refresh()
                         ui.notify("Đã cập nhật địa điểm")
@@ -178,6 +237,9 @@ def map_view() -> None:
                     {"name": "kind", "label": "Loại", "field": "kind"},
                     {"name": "layers", "label": "Layers", "field": "layers"},
                     {"name": "tags", "label": "Tags", "field": "tags"},
+                    {"name": "district", "label": "Quận", "field": "district"},
+                    {"name": "faction", "label": "Phe", "field": "faction"},
+                    {"name": "capacity", "label": "Sức chứa", "field": "capacity"},
                 ],
                 rows=[],
                 row_key="id",
@@ -218,6 +280,9 @@ def map_view() -> None:
                 "kind": poi.properties.kind,
                 "layers": _format_csv(poi.properties.layers) or "(none)",
                 "tags": _format_csv(poi.properties.tags) or "(none)",
+                "district": poi.district_id,
+                "faction": poi.properties.owner_faction_id or "-",
+                "capacity": poi.properties.capacity,
             }
             for poi in pois
         ]
@@ -235,5 +300,28 @@ def map_view() -> None:
         populate_form(match)
 
         render_map(pois)
+
+    if summary.get("districts"):
+        district_card = ui.card().classes("w-full bg-slate-900 text-slate-100 mt-4")
+        with district_card:
+            ui.label("Chỉ số quận").classes("text-lg font-semibold")
+            district_data: Dict[str, Dict[str, float]] = summary.get("districts", {})  # type: ignore[assignment]
+            ui.table(
+                columns=[
+                    {"name": "district", "label": "Quận", "field": "district"},
+                    {"name": "crime", "label": "Tội phạm", "field": "crime"},
+                    {"name": "guard", "label": "Guard", "field": "guard"},
+                    {"name": "capacity", "label": "Sức chứa", "field": "capacity"},
+                ],
+                rows=[
+                    {
+                        "district": district,
+                        "crime": data.get("crime_expected"),
+                        "guard": data.get("guard_coverage"),
+                        "capacity": f"{data.get('capacity')}/{data.get('capacity_target')}",
+                    }
+                    for district, data in district_data.items()
+                ],
+            ).classes("w-full")
 
     refresh()

@@ -21,3 +21,19 @@ def test_validate_world_detects_story_and_feature_gaps() -> None:
     assert any("thiếu liên kết hub" in issue for issue in issues)
     assert any("thiếu monster zone" in issue for issue in issues)
     assert any("thiếu tính năng" in issue for issue in issues)
+
+
+def test_validate_world_trade_and_guard_rules() -> None:
+    regenerate_foundation(seed=6)
+
+    save_dataset("trade_routes", [])
+
+    districts = load_dataset("districts", factory=list)
+    for district in districts:
+        if district.get("district_id") == "MARKET_EAST":
+            district["guard_coverage_base"] = 0.0
+    save_dataset("districts", districts)
+
+    issues = validate_world()
+    assert any("thiếu lương thực" in issue for issue in issues)
+    assert any("thiếu lực lượng canh gác" in issue for issue in issues)

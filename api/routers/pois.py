@@ -15,12 +15,18 @@ router = APIRouter(prefix="/pois", tags=["pois"])
 
 class POICreate(BaseModel):
     name: str
+    district_id: str
     layers: List[str] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
     coordinates: Optional[List[float]] = None
     kind: str = "landmark"
     description: str = ""
     media: List[str] = Field(default_factory=list)
+    owner_faction: Optional[str] = None
+    open_hours: List[str] = Field(default_factory=list)
+    capacity: int = 0
+    services: List[str] = Field(default_factory=list)
+    access_rule_id: Optional[str] = None
 
 
 class POIUpdate(BaseModel):
@@ -31,6 +37,12 @@ class POIUpdate(BaseModel):
     kind: Optional[str] = None
     description: Optional[str] = None
     media: Optional[List[str]] = None
+    district_id: Optional[str] = None
+    owner_faction: Optional[str] = None
+    open_hours: Optional[List[str]] = None
+    capacity: Optional[int] = None
+    services: Optional[List[str]] = None
+    access_rule_id: Optional[str] = None
 
 
 @router.get("", response_model=List[POI])
@@ -52,10 +64,16 @@ async def create_poi(payload: POICreate) -> POI:
         payload.name,
         layers=payload.layers,
         tags=payload.tags,
+        district_id=payload.district_id,
         coordinates=payload.coordinates,
         description=payload.description,
         kind=payload.kind,
         media=payload.media,
+        owner_faction=payload.owner_faction,
+        open_hours=payload.open_hours,
+        capacity=payload.capacity,
+        services=payload.services,
+        access_rule_id=payload.access_rule_id,
     )
     return poi
 
@@ -72,6 +90,12 @@ async def update_poi(poi_id: str, payload: POIUpdate) -> POI:
             kind=payload.kind,
             media=payload.media,
             coordinates=payload.coordinates,
+            district_id=payload.district_id,
+            owner_faction=payload.owner_faction,
+            open_hours=payload.open_hours,
+            capacity=payload.capacity,
+            services=payload.services,
+            access_rule_id=payload.access_rule_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

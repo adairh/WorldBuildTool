@@ -13,14 +13,21 @@ def test_generate_households_requires_pois() -> None:
 
 
 def test_poi_crud_cycle() -> None:
+    client.post("/world/regenerate", json={"seed": 13})
+
     response = client.post(
         "/pois",
         json={
             "name": "Chợ Tế Xuyên",
+            "district_id": "MARKET_EAST",
             "layers": ["economy", "transport"],
             "tags": ["grain", "textile"],
             "coordinates": [106.25, 21.05],
             "description": "Chợ chính quận Đông",
+            "owner_faction": "Merchants",
+            "open_hours": ["Day", "Dusk"],
+            "capacity": 120,
+            "services": ["Auction", "Vendor"],
         },
     )
     assert response.status_code == 200
@@ -33,10 +40,12 @@ def test_poi_crud_cycle() -> None:
 
     update = client.put(
         f"/pois/{poi_id}",
-        json={"tags": ["grain", "textile", "salt"]},
+        json={"tags": ["grain", "textile", "salt"], "capacity": 200},
     )
     assert update.status_code == 200
-    assert "salt" in update.json()["properties"]["tags"]
+    body = update.json()
+    assert "salt" in body["properties"]["tags"]
+    assert body["properties"]["capacity"] == 200
 
     delete = client.delete(f"/pois/{poi_id}")
     assert delete.status_code == 204
@@ -55,6 +64,8 @@ def test_world_dashboard_and_story() -> None:
     body = dashboard.json()
     assert body["story_coverage"] >= 0
     assert "encounter_breakdown" in body
+    assert "trade_summary" in body
+    assert body["city_overview"]["food_required"] > 0
 
     quests = client.get("/quests")
     assert quests.status_code == 200

@@ -3,6 +3,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from .components.assets import qa_view
+from .components.economy import economy_view
 from .components.encounters import encounters_view
 from .components.gameplay import gameplay_view
 from .components.loot import loot_view
@@ -42,6 +43,8 @@ def create_ui() -> None:
                 gameplay_view()
             with ui.tab_panel(loot_tab):
                 loot_view()
+                ui.separator().classes("my-4")
+                economy_view()
             with ui.tab_panel(qa_tab):
                 qa_view()
 

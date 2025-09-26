@@ -7,6 +7,8 @@ if str(ROOT) not in sys.path:
 
 import pytest
 
+pytest.importorskip("pydantic")
+
 from api.config import get_settings
 from api.storage import ensure_storage_dir, reset_storage
 

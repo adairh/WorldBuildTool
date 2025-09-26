@@ -22,7 +22,9 @@ def regenerate(payload: Dict[str, int] | None = None) -> Dict[str, object]:
 def dashboard() -> Dict[str, object]:
     summary = validation_summary()
     summary["storage"] = settings_summary()
+    summary_counts = summary.get("dataset_counts", {})
     summary["dataset_counts"] = {
+        **summary_counts,
         "pois": len(load_dataset("pois", factory=list)),
         "households": len(load_dataset("households", factory=list)),
         "persons": len(load_dataset("persons", factory=list)),
