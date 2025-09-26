@@ -1,3 +1,4 @@
+from .chatgpt import ai_channel_history, ai_memory_summary, clear_ai_channel, get_chatgpt, prompt_ai
 from .storycraft import craft_quest
 from .world_state import (
     WorldStateError,
@@ -46,4 +47,9 @@ __all__ = [
     "world_summary",
     "reset_world_cache",
     "craft_quest",
+    "get_chatgpt",
+    "prompt_ai",
+    "ai_memory_summary",
+    "ai_channel_history",
+    "clear_ai_channel",
 ]

@@ -157,6 +157,13 @@ class StoryPrompt(BaseModel):
         return value
 
 
+class PromptRequest(BaseModel):
+    channel: str = "workspace"
+    prompt: str
+    system_prompt: Optional[str] = None
+    temperature: Optional[float] = None
+
+
 def data_path_relative(path: Optional[str]) -> Optional[str]:
     if not path:
         return None

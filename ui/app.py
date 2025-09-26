@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from nicegui import ui
 
+from .components.ai import ai_view
 from .components.assets import asset_view
 from .components.map import map_view
 from .components.people import people_view
@@ -20,6 +21,7 @@ def create_ui() -> None:
             timeline_tab = ui.tab("Timeline Studio")
             quests_tab = ui.tab("Quest Studio")
             assets_tab = ui.tab("Asset Library")
+            ai_tab = ui.tab("AI Co-Pilot")
 
         with ui.tab_panels(tabs, value=overview_tab):
             with ui.tab_panel(overview_tab):
@@ -34,6 +36,8 @@ def create_ui() -> None:
                 quests_view()
             with ui.tab_panel(assets_tab):
                 asset_view()
+            with ui.tab_panel(ai_tab):
+                ai_view()
 
 
 def main() -> None:

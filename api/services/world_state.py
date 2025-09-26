@@ -6,8 +6,9 @@ from typing import Callable, Iterable, Optional
 
 from pydantic import ValidationError
 
-from ..models import Asset, Event, Household, POI, Quest, WorldNote, WorldState
+from ..models import Asset, Event, Household, POI, PromptRequest, Quest, WorldNote, WorldState
 from ..storage import dataset_path, load_dataset, save_dataset
+from .chatgpt import get_chatgpt
 
 WORLD_DATASET = "world_state"
 _MEDIA_DIR = "media"
@@ -53,22 +54,27 @@ def list_pois() -> Iterable[POI]:
 
 
 def create_or_update_poi(poi: POI) -> POI:
+    ai = get_chatgpt()
+    description = poi.description.strip() or ai.describe_poi(poi)
+    tags = poi.tags or ai.suggest_poi_tags(poi)
+    enriched = poi.model_copy(update={"description": description, "tags": tags})
+
     def mutate(world: WorldState) -> None:
-        world.ensure_layer(poi.layer)
-        existing = world.find_poi(poi.id)
+        world.ensure_layer(enriched.layer)
+        existing = world.find_poi(enriched.id)
         if existing:
-            existing.name = poi.name
-            existing.description = poi.description
-            existing.layer = poi.layer
-            existing.x = poi.x
-            existing.y = poi.y
-            existing.tags = poi.tags
-            existing.media = poi.media
+            existing.name = enriched.name
+            existing.description = enriched.description
+            existing.layer = enriched.layer
+            existing.x = enriched.x
+            existing.y = enriched.y
+            existing.tags = enriched.tags
+            existing.media = enriched.media
         else:
-            world.pois.append(poi)
+            world.pois.append(enriched)
 
     update_world(mutate)
-    return poi
+    return enriched
 
 
 def delete_poi(poi_id: str) -> None:
@@ -89,18 +95,27 @@ def delete_poi(poi_id: str) -> None:
 
 
 def add_household(household: Household) -> Household:
+    ai = get_chatgpt()
+    notes = household.notes.strip() or ai.enrich_household_notes(household)
+    profession_map = ai.suggest_professions(household)
+    members = [
+        member.model_copy(update={"profession": profession_map.get(member.id, member.profession)})
+        for member in household.members
+    ]
+    enriched = household.model_copy(update={"notes": notes, "members": members})
+
     def mutate(world: WorldState) -> None:
-        existing = world.find_household(household.id)
+        existing = world.find_household(enriched.id)
         if existing:
-            existing.name = household.name
-            existing.home_poi_id = household.home_poi_id
-            existing.notes = household.notes
-            existing.members = household.members
+            existing.name = enriched.name
+            existing.home_poi_id = enriched.home_poi_id
+            existing.notes = enriched.notes
+            existing.members = enriched.members
         else:
-            world.households.append(household)
+            world.households.append(enriched)
 
     update_world(mutate)
-    return household
+    return enriched
 
 
 def delete_household(household_id: str) -> None:
@@ -111,19 +126,53 @@ def delete_household(household_id: str) -> None:
 
 
 def add_quest(quest: Quest) -> Quest:
+    ai = get_chatgpt()
+    if not quest.synopsis.strip():
+        summary_prompt = PromptRequest(
+            channel="quest-synopsis",
+            prompt=(
+                f"Tóm tắt quest '{quest.title}' trong bối cảnh Thăng Long với {len(quest.steps)} bước: "
+                + ", ".join(step.title for step in quest.steps)
+            ),
+            system_prompt="Bạn tóm tắt quest cho nhà thiết kế MMO, tối đa 2 câu.",
+            temperature=0.6,
+        )
+        synopsis = ai.prompt(summary_prompt)
+    else:
+        synopsis = quest.synopsis
+
+    enriched_steps = []
+    for index, step in enumerate(quest.steps, start=1):
+        if step.description.strip():
+            enriched_steps.append(step)
+            continue
+        detail_prompt = PromptRequest(
+            channel="quest-step",
+            prompt=(
+                f"Viết mô tả 1-2 câu cho bước {index} tên '{step.title}' trong quest '{quest.title}'."\
+                " Bối cảnh Thăng Long thời Trần, giọng wuxia."
+            ),
+            system_prompt="Bạn mô tả bước quest cô đọng và giàu hình ảnh.",
+            temperature=0.7,
+        )
+        description = ai.prompt(detail_prompt)
+        enriched_steps.append(step.model_copy(update={"description": description}))
+
+    enriched = quest.model_copy(update={"synopsis": synopsis, "steps": enriched_steps})
+
     def mutate(world: WorldState) -> None:
-        existing = world.find_quest(quest.id)
+        existing = world.find_quest(enriched.id)
         if existing:
-            existing.title = quest.title
-            existing.synopsis = quest.synopsis
-            existing.arc = quest.arc
-            existing.recommended_level = quest.recommended_level
-            existing.steps = quest.steps
+            existing.title = enriched.title
+            existing.synopsis = enriched.synopsis
+            existing.arc = enriched.arc
+            existing.recommended_level = enriched.recommended_level
+            existing.steps = enriched.steps
         else:
-            world.quests.append(quest)
+            world.quests.append(enriched)
 
     update_world(mutate)
-    return quest
+    return enriched
 
 
 def delete_quest(quest_id: str) -> None:
@@ -134,19 +183,23 @@ def delete_quest(quest_id: str) -> None:
 
 
 def add_event(event: Event) -> Event:
+    ai = get_chatgpt()
+    description = event.description.strip() or ai.describe_event(event)
+    enriched = event.model_copy(update={"description": description})
+
     def mutate(world: WorldState) -> None:
-        existing = next((item for item in world.events if item.id == event.id), None)
+        existing = next((item for item in world.events if item.id == enriched.id), None)
         if existing:
-            existing.title = event.title
-            existing.date = event.date
-            existing.description = event.description
-            existing.poi_id = event.poi_id
-            existing.tags = event.tags
+            existing.title = enriched.title
+            existing.date = enriched.date
+            existing.description = enriched.description
+            existing.poi_id = enriched.poi_id
+            existing.tags = enriched.tags
         else:
-            world.events.append(event)
+            world.events.append(enriched)
 
     update_world(mutate)
-    return event
+    return enriched
 
 
 def delete_event(event_id: str) -> None:
@@ -157,21 +210,25 @@ def delete_event(event_id: str) -> None:
 
 
 def add_asset(asset: Asset) -> Asset:
+    ai = get_chatgpt()
+    notes = asset.notes.strip() or ai.annotate_asset(asset)
+    enriched = asset.model_copy(update={"notes": notes})
+
     def mutate(world: WorldState) -> None:
-        existing = next((item for item in world.assets if item.id == asset.id), None)
+        existing = next((item for item in world.assets if item.id == enriched.id), None)
         if existing:
-            existing.name = asset.name
-            existing.kind = asset.kind
-            existing.status = asset.status
-            existing.owner = asset.owner
-            existing.tags = asset.tags
-            existing.notes = asset.notes
-            existing.reference = asset.reference
+            existing.name = enriched.name
+            existing.kind = enriched.kind
+            existing.status = enriched.status
+            existing.owner = enriched.owner
+            existing.tags = enriched.tags
+            existing.notes = enriched.notes
+            existing.reference = enriched.reference
         else:
-            world.assets.append(asset)
+            world.assets.append(enriched)
 
     update_world(mutate)
-    return asset
+    return enriched
 
 
 def delete_asset(asset_id: str) -> None:

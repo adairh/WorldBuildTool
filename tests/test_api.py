@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("TLFORGE_FAKE_AI", "1")
+
 from fastapi.testclient import TestClient
 
 from api.main import app
@@ -100,3 +104,14 @@ def test_event_crud_cycle() -> None:
 
     remove = client.delete(f"/events/{event_id}")
     assert remove.status_code == 204
+
+
+def test_ai_prompt_endpoint() -> None:
+    payload = {"channel": "test", "prompt": "Tạo một câu giới thiệu."}
+    response = client.post("/ai/prompt", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert "response" in body and isinstance(body["response"], str)
+
+    memory = client.get("/ai/memory").json()
+    assert "test" in memory.get("channels", {})
