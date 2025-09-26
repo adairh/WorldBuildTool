@@ -1,41 +1,30 @@
 from __future__ import annotations
 
-from typing import List, Optional
-
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
 from ..models import Household
-from ..services import generate_households
-from ..storage import load_dataset
+from ..services import add_household, delete_household, get_world
 
 router = APIRouter(prefix="/households", tags=["households"])
 
 
-class HouseholdGenerateRequest(BaseModel):
-    count: int = Field(default=10, ge=1, le=200)
-    seed: Optional[int] = None
-    poi_pool: Optional[List[str]] = None
+@router.get("", response_model=list[Household])
+def list_households() -> list[Household]:
+    return list(get_world().households)
 
 
-def _load_households() -> List[Household]:
-    return [Household.model_validate(item) for item in load_dataset("households", factory=list)]
+@router.post("", response_model=Household)
+def create_household(household: Household) -> Household:
+    return add_household(household)
 
 
-@router.get("", response_model=List[Household])
-async def list_households() -> List[Household]:
-    return _load_households()
+@router.put("/{household_id}", response_model=Household)
+def update_household(household_id: str, payload: Household) -> Household:
+    return add_household(payload.model_copy(update={"id": household_id}))
 
 
-@router.get("/{household_id}", response_model=Household)
-async def get_household(household_id: str) -> Household:
-    for household in _load_households():
-        if household.household_id == household_id:
-            return household
-    raise HTTPException(status_code=404, detail="Household not found")
-
-
-@router.post("/generate", response_model=List[Household])
-async def generate(request: HouseholdGenerateRequest) -> List[Household]:
-    households = generate_households(request.count, seed=request.seed, poi_pool=request.poi_pool)
-    return households
+@router.delete("/{household_id}", status_code=204)
+def remove_household(household_id: str) -> None:
+    if not get_world().find_household(household_id):
+        raise HTTPException(status_code=404, detail="Household not found")
+    delete_household(household_id)

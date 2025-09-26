@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class Settings(BaseModel):
@@ -14,8 +14,7 @@ class Settings(BaseModel):
     storage_dir: Path = Path(os.getenv("STORAGE_DIR", "./storage")).expanduser()
     export_subdir: str = os.getenv("EXPORT_SUBDIR", "exports")
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 @lru_cache()

@@ -1,94 +1,102 @@
-import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from api.services import generate_households
 
 client = TestClient(app)
 
 
-def test_generate_households_requires_pois() -> None:
-    with pytest.raises(ValueError):
-        generate_households(3, seed=1)
+def test_world_default_state() -> None:
+    response = client.get("/world")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pois"] == []
+    summary = client.get("/world/summary").json()
+    assert summary["total_pois"] == 0
 
 
 def test_poi_crud_cycle() -> None:
-    client.post("/world/regenerate", json={"seed": 13})
-
-    response = client.post(
+    create = client.post(
         "/pois",
-        json={
-            "name": "Chợ Tế Xuyên",
-            "district_id": "MARKET_EAST",
-            "layers": ["economy", "transport"],
-            "tags": ["grain", "textile"],
-            "coordinates": [106.25, 21.05],
-            "description": "Chợ chính quận Đông",
-            "owner_faction": "Merchants",
-            "open_hours": ["Day", "Dusk"],
-            "capacity": 120,
-            "services": ["Auction", "Vendor"],
-        },
+        json={"name": "Chợ Tế Xuyên", "layer": "economy", "x": 120.5, "y": 45.1, "tags": ["market"]},
     )
-    assert response.status_code == 200
-    poi_id = response.json()["id"]
+    assert create.status_code == 200
+    poi = create.json()
+    poi_id = poi["id"]
 
-    list_response = client.get("/pois")
-    assert list_response.status_code == 200
-    ids = {item["id"] for item in list_response.json()}
-    assert poi_id in ids
+    detail = client.get(f"/pois/{poi_id}")
+    assert detail.status_code == 200
+    assert detail.json()["name"] == "Chợ Tế Xuyên"
 
-    update = client.put(
+    updated = client.put(
         f"/pois/{poi_id}",
-        json={"tags": ["grain", "textile", "salt"], "capacity": 200},
+        json={"id": poi_id, "name": "Chợ mới", "layer": "economy", "x": 10, "y": 20, "tags": []},
     )
-    assert update.status_code == 200
-    body = update.json()
-    assert "salt" in body["properties"]["tags"]
-    assert body["properties"]["capacity"] == 200
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Chợ mới"
 
     delete = client.delete(f"/pois/{poi_id}")
     assert delete.status_code == 204
 
-    confirm = client.get(f"/pois/{poi_id}")
-    assert confirm.status_code == 404
+    missing = client.get(f"/pois/{poi_id}")
+    assert missing.status_code == 404
 
 
-def test_world_dashboard_and_story() -> None:
-    regenerate = client.post("/world/regenerate", json={"seed": 11})
-    assert regenerate.status_code == 200
-    assert regenerate.json()["datasets"]["pois"] > 0
+def test_quest_generation_from_prompt() -> None:
+    prompt = {
+        "prompt": "Giải cứu đoàn thương nhân khỏi bọn cướp trên sông.",
+        "steps": 3,
+        "seed": 7,
+    }
+    craft = client.post("/quests/craft", json=prompt)
+    assert craft.status_code == 200
+    quest = craft.json()
+    assert len(quest["steps"]) == 3
 
-    dashboard = client.get("/world/dashboard")
-    assert dashboard.status_code == 200
-    body = dashboard.json()
-    assert body["story_coverage"] >= 0
-    assert "encounter_breakdown" in body
-    assert "trade_summary" in body
-    assert body["city_overview"]["food_required"] > 0
-
-    quests = client.get("/quests")
-    assert quests.status_code == 200
-    assert len(quests.json()) > 0
-
-    arcs = client.get("/story/arcs")
-    assert arcs.status_code == 200
-    assert len(arcs.json()) > 0
-
-    zones = client.get("/monsters/zones")
-    assert zones.status_code == 200
-    assert len(zones.json()) > 0
+    quests = client.get("/quests").json()
+    assert any(item["id"] == quest["id"] for item in quests)
 
 
-def test_export_bundle() -> None:
-    client.post("/world/regenerate", json={"seed": 7})
-    export_response = client.post(
-        "/export",
-        json={
-            "types": ["households", "persons", "quests", "items"],
-            "format": "json",
-        },
+def test_household_and_summary_counts() -> None:
+    poi = client.post("/pois", json={"name": "Đình", "layer": "culture", "x": 1, "y": 2}).json()
+    household_payload = {
+        "name": "Gia đình họ Trần",
+        "home_poi_id": poi["id"],
+        "notes": "",
+        "members": [
+            {"name": "Trần Văn", "birth_year": 1260, "sex": "M"},
+            {"name": "Nguyễn Thị", "birth_year": 1265, "sex": "F"},
+        ],
+    }
+    household = client.post("/households", json=household_payload)
+    assert household.status_code == 200
+
+    summary = client.get("/world/summary").json()
+    assert summary["total_households"] == 1
+    assert summary["total_npcs"] == 2
+    assert summary["coverage"]["culture"] == 1
+
+
+def test_event_crud_cycle() -> None:
+    event_payload = {
+        "title": "Lễ hội Đèn Lồng",
+        "date": "1285-08-15",
+        "description": "Lễ hội mùa thu.",
+        "poi_id": None,
+        "tags": ["festival"],
+    }
+    created = client.post("/events", json=event_payload)
+    assert created.status_code == 200
+    event_id = created.json()["id"]
+
+    listed = client.get("/events").json()
+    assert any(item["id"] == event_id for item in listed)
+
+    updated = client.put(
+        f"/events/{event_id}",
+        json={**event_payload, "id": event_id, "description": "Phiên bản mở rộng."},
     )
-    assert export_response.status_code == 200
-    path = export_response.json()["path"]
-    assert path.endswith(".json")
+    assert updated.status_code == 200
+    assert updated.json()["description"] == "Phiên bản mở rộng."
+
+    remove = client.delete(f"/events/{event_id}")
+    assert remove.status_code == 204

@@ -2,4 +2,4 @@ fastapi
 uvicorn
 pydantic
 nicegui
-faker
+pytest
