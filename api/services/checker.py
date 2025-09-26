@@ -81,6 +81,7 @@ def validate_world(state: Optional[WorldState] = None, min_event_age: int = 10) 
     city: City | None = state.get("city")  # type: ignore[assignment]
     districts: Sequence[District] = state.get("districts", [])  # type: ignore[assignment]
     persons = {person.person_id: person for person in state["persons"]}  # type: ignore[index]
+    npc_mix: Sequence[NPCMix] = state.get("npc_mix", [])  # type: ignore[assignment]
     households: Sequence[Household] = state["households"]  # type: ignore[assignment]
     events: Sequence[Event] = state["events"]  # type: ignore[assignment]
     quests: Sequence[Quest] = state["quests"]  # type: ignore[assignment]
@@ -101,6 +102,9 @@ def validate_world(state: Optional[WorldState] = None, min_event_age: int = 10) 
     tuning: Tuning | None = state.get("tuning")  # type: ignore[assignment]
     poi_name = _poi_lookup(pois)
     hub_ids = [poi.id for poi in pois if "hub" in poi.properties.layers]
+    occupied_hubs = {household.location.poi_id for household in households if household.location.poi_id}
+    all_pois = {poi.id for poi in pois}
+    target_hubs = sorted(all_pois | set(hub_ids) | occupied_hubs)
 
     issues: List[str] = []
 
@@ -152,7 +156,7 @@ def validate_world(state: Optional[WorldState] = None, min_event_age: int = 10) 
     for arc in arcs:
         for hub_id in arc.coverage_hubs:
             coverage_by_hub[hub_id].append(arc.name)
-    for hub_id in hub_ids:
+    for hub_id in target_hubs:
         if hub_id not in coverage_by_hub:
             issues.append(f"Hub {poi_name.get(hub_id, hub_id)} chưa có story arc chạm tới")
 
@@ -164,7 +168,7 @@ def validate_world(state: Optional[WorldState] = None, min_event_age: int = 10) 
             hubs_with_zones.add(zone.anchor_poi_id)
         for encounter in zone.encounters:
             style_counter[encounter.style] += 1
-    for hub_id in hub_ids:
+    for hub_id in target_hubs:
         if hub_id not in hubs_with_zones:
             issues.append(f"Hub {poi_name.get(hub_id, hub_id)} thiếu monster zone gắn kết")
     for style in VARIETY_STYLES:
@@ -175,7 +179,7 @@ def validate_world(state: Optional[WorldState] = None, min_event_age: int = 10) 
     features_by_hub: Dict[str, set[str]] = defaultdict(set)
     for feature in features:
         features_by_hub[feature.poi_id].add(feature.feature_type)
-    for hub_id in hub_ids:
+    for hub_id in target_hubs:
         missing = sorted(ESSENTIAL_FEATURES - features_by_hub.get(hub_id, set()))
         if missing:
             hub_label = poi_name.get(hub_id, hub_id)
