@@ -1,1 +1,1 @@
-"""TL-Forge API package."""
+"""TL-Forge Lite API package."""

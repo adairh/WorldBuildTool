@@ -1,11 +1,22 @@
+from __future__ import annotations
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import api_router
+from .routers import router as api_router
 
-app = FastAPI(title="TL-Forge API", version="2.0")
-app.include_router(api_router)
+app = FastAPI(title="TL-Forge Household Planner", version="2024.10")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"]
+    ,
+    allow_headers=["*"],
+)
+app.include_router(api_router, prefix="/api")
 
 
 @app.get("/")
-def read_root() -> dict:
-    return {"message": "Welcome to TL-Forge API"}
+def root() -> dict:
+    return {"message": "TL-Forge Household Planner API"}

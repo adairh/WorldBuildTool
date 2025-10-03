@@ -2,5 +2,7 @@ fastapi
 uvicorn
 pydantic
 nicegui
-pytest
+httpx
+pandas
+openpyxl
 openai

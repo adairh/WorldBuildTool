@@ -2,58 +2,58 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Iterable, MutableMapping, MutableSequence
-from datetime import date, datetime
+from typing import Iterable, List
 
-from .config import ensure_storage_dir, get_settings
-
-DataLike = MutableMapping[str, Any] | MutableSequence[Any]
+from .config import get_settings
+from .models import WorldState, empty_world
 
 
-def dataset_path(name: str) -> Path:
-    base = ensure_storage_dir()
-    return base / f"{name}.json"
+def _read_json(path: Path) -> dict:
+    if not path.exists() or path.read_text(encoding="utf-8").strip() == "":
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_dataset(name: str, factory: Callable[[], DataLike] | None = None) -> DataLike:
-    path = dataset_path(name)
-    if not path.exists():
-        return factory() if factory else []
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _json_default(value: Any) -> Any:
-    if isinstance(value, (date, datetime)):
-        return value.isoformat()
-    return value
-
-
-def save_dataset(name: str, data: DataLike) -> Path:
-    path = dataset_path(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(data, handle, ensure_ascii=False, indent=2, default=_json_default)
-    return path
-
-
-def export_path(filename: str) -> Path:
+def load_world() -> WorldState:
     settings = get_settings()
-    export_dir = settings.storage_dir / settings.export_subdir
-    export_dir.mkdir(parents=True, exist_ok=True)
-    return export_dir / filename
+    data = _read_json(settings.state_file)
+    if not data:
+        return empty_world()
+    return WorldState.parse_obj(data)
 
 
-def list_exports() -> Iterable[Path]:
-    export_dir = get_settings().storage_dir / get_settings().export_subdir
-    if not export_dir.exists():
-        return []
-    return sorted(export_dir.glob("*"))
+def save_world(state: WorldState) -> WorldState:
+    settings = get_settings()
+    state.touch()
+    _write_json(settings.state_file, json.loads(state.json()))
+    return state
 
 
-def reset_storage() -> None:
-    """Remove all JSON payloads (for tests)."""
+def append_memory(entry: dict) -> None:
+    settings = get_settings()
+    raw = settings.memory_file.read_text(encoding="utf-8") if settings.memory_file.exists() else "[]"
+    history: List[dict] = json.loads(raw) if raw.strip() else []
+    history.append(entry)
+    settings.memory_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    base = ensure_storage_dir()
-    for path in base.glob("*.json"):
-        path.unlink(missing_ok=True)
+
+def load_memory(limit: int | None = None) -> List[dict]:
+    settings = get_settings()
+    raw = settings.memory_file.read_text(encoding="utf-8") if settings.memory_file.exists() else "[]"
+    history: List[dict] = json.loads(raw) if raw.strip() else []
+    if limit is not None:
+        return history[-limit:]
+    return history
+
+
+def clear_households(state: WorldState, area_ids: Iterable[str] | None = None) -> WorldState:
+    if area_ids is None:
+        state.households = []
+    else:
+        target = set(area_ids)
+        state.households = [h for h in state.households if h.area_id not in target]
+    return save_world(state)
