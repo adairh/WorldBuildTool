@@ -17,10 +17,9 @@ def world_view() -> None:
             ("Quest", summary["total_quests"]),
             ("Sự kiện", summary["total_events"]),
         ]:
-            ui.card().classes("bg-slate-900 text-slate-100 p-4 w-48").with_slots(lambda l=label, v=value: (
-                ui.label(l).classes("text-sm uppercase text-slate-400"),
-                ui.label(str(v)).classes("text-2xl font-semibold mt-1"),
-            ))
+            with ui.card().classes("bg-slate-900 text-slate-100 p-4 w-48"):
+                ui.label(label).classes("text-sm uppercase text-slate-400")
+                ui.label(str(value)).classes("text-2xl font-semibold mt-1")
 
     with ui.row().classes("w-full mt-4"):
         coverage_card = ui.card().classes("w-full")
