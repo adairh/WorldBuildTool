@@ -1,11 +1,51 @@
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 from pathlib import Path
+from threading import Lock
 from typing import Iterable, List
 
 from .config import get_settings
 from .models import WorldState, empty_world
+
+
+_MEMORY_LOCK = Lock()
+
+
+def _parse_json_sequence(raw: str) -> List[dict]:
+    raw = raw.strip()
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except JSONDecodeError:
+        decoder = json.JSONDecoder()
+        index = 0
+        items: List[dict] = []
+        length = len(raw)
+        while index < length:
+            while index < length and raw[index].isspace():
+                index += 1
+            if index >= length:
+                break
+            try:
+                obj, index = decoder.raw_decode(raw, index)
+            except JSONDecodeError:
+                break
+            if isinstance(obj, list):
+                for entry in obj:
+                    if isinstance(entry, dict):
+                        items.append(entry)
+            elif isinstance(obj, dict):
+                items.append(obj)
+        return items
+    else:
+        if isinstance(data, list):
+            return [entry for entry in data if isinstance(entry, dict)]
+        if isinstance(data, dict):
+            return [data]
+        return []
 
 
 def _read_json(path: Path) -> dict:
@@ -35,16 +75,20 @@ def save_world(state: WorldState) -> WorldState:
 
 def append_memory(entry: dict) -> None:
     settings = get_settings()
-    raw = settings.memory_file.read_text(encoding="utf-8") if settings.memory_file.exists() else "[]"
-    history: List[dict] = json.loads(raw) if raw.strip() else []
-    history.append(entry)
-    settings.memory_file.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+    with _MEMORY_LOCK:
+        raw = settings.memory_file.read_text(encoding="utf-8") if settings.memory_file.exists() else "[]"
+        history: List[dict] = _parse_json_sequence(raw)
+        history.append(entry)
+        settings.memory_file.write_text(
+            json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
 
 def load_memory(limit: int | None = None) -> List[dict]:
     settings = get_settings()
-    raw = settings.memory_file.read_text(encoding="utf-8") if settings.memory_file.exists() else "[]"
-    history: List[dict] = json.loads(raw) if raw.strip() else []
+    with _MEMORY_LOCK:
+        raw = settings.memory_file.read_text(encoding="utf-8") if settings.memory_file.exists() else "[]"
+        history: List[dict] = _parse_json_sequence(raw)
     if limit is not None:
         return history[-limit:]
     return history

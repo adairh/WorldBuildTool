@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+import api.storage as storage
+from api.storage import load_memory
+
 
 def test_profession_crud(client: TestClient):
     payload = {"name": "Thương nhân", "description": "Buôn bán quanh chợ"}
@@ -44,3 +47,14 @@ def test_area_generation_flow(client: TestClient):
     export_resp = client.get("/api/export/excel")
     assert export_resp.status_code == 200
     assert export_resp.headers["content-type"].startswith("application/vnd.openxmlformats")
+
+
+def test_memory_loader_handles_concatenated_arrays():
+    settings = storage.get_settings()
+    payload = """[{\"id\":1}]\n[{\"id\":2}]"""
+    settings.memory_file.write_text(payload, encoding="utf-8")
+
+    history = load_memory()
+    assert len(history) == 2
+    assert history[0]["id"] == 1
+    assert history[1]["id"] == 2
