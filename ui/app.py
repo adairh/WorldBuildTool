@@ -86,8 +86,11 @@ def professions_view() -> None:
         description_input.value = ""
         await refresh()
 
-    async def delete_row(event: dict) -> None:
-        await api_client.delete_profession(event["row"]["id"])
+    async def delete_row(event: Any) -> None:
+        row = getattr(event, "args", {}).get("row") if hasattr(event, "args") else None
+        if not row:
+            return
+        await api_client.delete_profession(row["id"])
         await refresh()
 
     ui.button("Thêm nghề", on_click=lambda: asyncio.create_task(create_profession()))
@@ -127,12 +130,18 @@ def areas_view() -> None:
         planned_input.value = 0
         await refresh()
 
-    async def delete_row(event: dict) -> None:
-        await api_client.delete_area(event["row"]["id"])
+    async def delete_row(event: Any) -> None:
+        row = getattr(event, "args", {}).get("row") if hasattr(event, "args") else None
+        if not row:
+            return
+        await api_client.delete_area(row["id"])
         await refresh()
 
-    async def generate_row(event: dict) -> None:
-        await api_client.generate_area(event["row"]["id"])
+    async def generate_row(event: Any) -> None:
+        row = getattr(event, "args", {}).get("row") if hasattr(event, "args") else None
+        if not row:
+            return
+        await api_client.generate_area(row["id"])
         await refresh()
 
     ui.button("Thêm khu", on_click=lambda: asyncio.create_task(create_area()))
@@ -176,8 +185,9 @@ def households_view() -> None:
         table.rows = rows
         table.update()
 
-    async def show_members(event: dict) -> None:
-        data = event["row"].get("_raw")
+    async def show_members(event: Any) -> None:
+        row = getattr(event, "args", {}).get("row") if hasattr(event, "args") else None
+        data = row.get("_raw") if row else None
         if not data:
             return
         members_panel.clear()
@@ -189,8 +199,11 @@ def households_view() -> None:
                     ui.button("Xóa", on_click=lambda m=member: asyncio.create_task(api_client.delete_member(data['id'], m['id']))).props("flat")
         members_panel.expand()
 
-    async def delete_household_row(event: dict) -> None:
-        await api_client.delete_household(event["row"]["id"])
+    async def delete_household_row(event: Any) -> None:
+        row = getattr(event, "args", {}).get("row") if hasattr(event, "args") else None
+        if not row:
+            return
+        await api_client.delete_household(row["id"])
         await refresh()
 
     ui.button("Làm mới", on_click=lambda: asyncio.create_task(refresh()))
